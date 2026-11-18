@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+patch=$1
+revision=$2
+read -r previous _ < RELEASE
+version="${previous%.*}.$patch"
+printf '%s %s\n' "$version" "$revision" > RELEASE
+bundle lock --local
+bundle check
+gem build sukashi.gemspec --output "$RUNNER_TEMP/sukashi.gem"
