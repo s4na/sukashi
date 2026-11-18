@@ -1,0 +1,22 @@
+# Copy into the consuming repository's .github/workflows after configuring its test services.
+name: Sukashi shadow
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      # Prepare the database/browser as in the existing test workflow.
+      - name: Compare selected and full tests
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bundle exec sukashi check --base "$BASE_SHA" --head HEAD --mode shadow > comparison.json

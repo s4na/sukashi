@@ -12,9 +12,10 @@ module Sukashi
         puts "sukashi #{VERSION} (#{SOURCE_REVISION})"
         return 0
       end
-      options = { head: "HEAD", seed: 1, config: File.file?(".sukashi.yml") ? ".sukashi.yml" : nil }
+      options = { mode: "shadow", head: "HEAD", seed: 1, config: File.file?(".sukashi.yml") ? ".sukashi.yml" : nil }
       parser = OptionParser.new do |o|
         o.banner = "Usage: sukashi plan --base REF [--head REF] | run --plan FILE | check --base REF | --version"
+        o.on("--mode MODE", %w[shadow enforce], "shadow (default) or enforce") { |v| options[:mode] = v }
         o.on("--base REF") { |v| options[:base] = v }
         o.on("--head REF") { |v| options[:head] = v }
         o.on("--seed N", Integer) { |v| options[:seed] = v }
@@ -47,7 +48,7 @@ module Sukashi
         puts JSON.pretty_generate(plan)
         return 0
       end
-      report = Comparison.new(repo, config, plan).run
+      report = Comparison.new(repo, config, plan, mode: options[:mode]).run
       puts JSON.pretty_generate(report)
       report["ok"] ? 0 : 1
     rescue Error, OptionParser::ParseError, KeyError, ArgumentError, SystemCallError, Psych::Exception => e

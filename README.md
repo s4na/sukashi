@@ -36,6 +36,20 @@ bundle exec sukashi run --plan plan.json > comparison.json
 
 `subset` では選択したIDと全件を順に実行します。`full` は全件を1回実行します。`skip`（差分なし、または明示したドキュメントのみ）でも照合用の全件は実行します。JSONは標準出力、テストのログは標準エラーに出ます。`full_only_failures` は全件でのみ失敗したID、`inventory_drift` は列挙・選択・実行したIDの不一致です。テストの失敗や照合の不一致は終了コード1、設定・起動前の入力エラーは2です。全件との並走中は、ファイル丸ごと選んだ場合の件数（`file_level_count`）と個別ID数を比較できます。時間は列挙・解析の `plan_seconds`、選択実行の `selected_seconds`、全件の `full_seconds` を分けて記録します。
 
+## shadow のコストと enforce への移行
+
+既定の `--mode shadow` は削減の検証用です。subset ジョブの時間はおおよそ **discover + subset + full**、full / skip ジョブは **discover + full** です。discover でもアプリのロードが必要で、Minitest は列挙用にテストをロードします。計測結果が得られない場合、shadowは設定済みの全件コマンドを計測オプションなしで再実行し、その終了ステータスを採用します。初めから計測しないジョブは `runner: command` を指定してください。
+
+`--mode enforce` はPR差分から影響を追えたテストを実行する、明示的な選択実行です。変更行だけを直接実行する機能ではなく、影響するrequest/system/unitテストをID単位で残します。Railsの設定・ルート・view・共有hookやGemfile/Gemfile.lockの変更は影響を限定できないため全件に戻ります。gem内部の動的な振る舞いまで網羅する保証はありません。subset は選択IDのみ、skip は正常な非空のID一覧を列挙できた場合だけ実行なし、full・古い/不正なplan・commandジョブ・列挙不能/空のジョブは全件1回です。列挙結果がない全件ジョブは、計測オプションを付けずに設定済みコマンドを1回だけ実行します。正常に列挙できたジョブは、選択または全件の予定IDと実行IDが一致しないと失敗します。未実行の全件結果はJSONで `null`、`comparison_performed: false` です。成功は省略したテストの成功を意味しません。shadow の結果だけで選択が常に安全と証明することもできません。
+
+```sh
+bundle exec sukashi check --base origin/main --mode enforce > comparison.json
+```
+
+導入時は shadow を継続し、選択漏れ・ID不一致を調べてから enforce を明示的に有効化します。移行後も main の push、定期実行、またはN回ごとの shadow を別途残してください。自動で shadow に戻す頻度はCLIでは決めません。問題が出たら `--mode shadow` に戻します。
+
+[GitHub Actionsの利用例](docs/examples/sukashi.yml) はPR headと比較元を取得して shadow を実行します。導入先のDB・ブラウザ準備を追加して使用してください。enforce へ移行する場合もmain側の通常の全件テストを削除しないでください。
+
 ## 既存のテストジョブを登録する
 
 既定では `spec/` があればRSpec、`test/` があればMinitestを使います。Railsでは `bin/rails test:all` でsystem testを含めます。通常のRubyでは `test/` 以下の `test_*.rb` と `*_test.rb` をロードします。独自のディレクトリ、タグ、分割ジョブがある場合はCIで使う全件コマンドを `.sukashi.yml` に記載します（別名の設定は `--config FILE`）。設定を置いた場合は、そこに列挙したジョブが対象です。

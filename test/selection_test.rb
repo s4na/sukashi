@@ -396,4 +396,138 @@ class SelectionTest < Minitest::Test
     assert_equal [GIFT_UNIT, REGULAR_UNIT, RACK_REQUEST, RECEIPT_SYSTEM].sort, report.dig("jobs", "minitest", "full_failures")
     assert report.fetch("jobs").values.all? { |job| job["mode"] == "full" }
   end
+
+  # Observe real child invocations, not just report fields. This shell wrapper
+  # preserves each runner's arguments and environment.
+  def prepare_observed_jobs
+    write("bin/observe-run", <<~'SH')
+      #!/bin/sh
+      name="$1"
+      shift
+      selected=no
+      [ -n "$SUKASHI_SELECT" ] && selected=yes
+      printf '%s\n' "$selected" >> "tmp-$name-invocations.log"
+      exec "$@"
+    SH
+    write(".sukashi.yml", <<~YAML)
+      jobs:
+        rspec:
+          runner: rspec
+          command: [sh, bin/observe-run, rspec, rspec]
+        minitest:
+          runner: minitest
+          command: [sh, bin/observe-run, minitest, bin/rails, "test:all"]
+    YAML
+    commit("observe configured jobs")
+    cmd("git", "rev-parse", "HEAD")
+  end
+
+  def observed_calls(name)
+    File.readlines(File.join(@root, "tmp-#{name}-invocations.log"), chomp: true)
+  end
+
+  def mode_cli(*args, code: 0)
+    # Dependency-change fixtures must not replace this test suite's bundle.
+    gemfile = File.expand_path("../Gemfile", __dir__)
+    out, err, status = Open3.capture3({ "BUNDLE_GEMFILE" => gemfile }, CLI, *args, chdir: @root)
+    assert_equal code, status.exitstatus, "#{out}\n#{err}"
+    JSON.parse(out)
+  end
+
+  def test_enforce_runs_real_rails_selected_ids_without_full_execution
+    base = prepare_observed_jobs
+    change_fee("500", "700")
+    report = mode_cli("check", "--base", base, "--mode", "enforce", "--seed", "1234", code: 1)
+    expected = { "rspec" => [GIFT_REQUEST, RECEIPT_REQUEST, GIFT_SYSTEM],
+                 "minitest" => [GIFT_UNIT, RACK_REQUEST, RECEIPT_SYSTEM] }
+    expected.each do |name, ids|
+      job = report.fetch("jobs").fetch(name)
+      assert_equal "subset", job.fetch("mode")
+      assert_equal ids.sort, job.fetch("selected_ids")
+      assert_equal ids.sort, job.fetch("executed_ids")
+      assert_nil job.fetch("full_count")
+      assert_nil job.fetch("full_failures")
+      assert_nil job.fetch("full_only_failures")
+      assert_nil job.fetch("full_seconds")
+      refute job.fetch("comparison_performed")
+      refute job.fetch("inventory_drift")
+      assert_equal %w[no yes], observed_calls(name), "discover then selected only"
+    end
+    assert_equal [GIFT_REQUEST, RECEIPT_REQUEST, GIFT_SYSTEM].sort, report.dig("jobs", "rspec", "selected_failures")
+    assert_equal [GIFT_UNIT, RECEIPT_SYSTEM].sort, report.dig("jobs", "minitest", "selected_failures")
+  end
+
+  def test_default_shadow_runs_real_selected_and_full_jobs
+    base = prepare_observed_jobs
+    change_fee("500", "700")
+    report = mode_cli("check", "--base", base, "--seed", "1234", code: 1)
+    assert_equal "shadow", report.fetch("execution_mode")
+    assert_subset(report.dig("jobs", "rspec"),
+      selected: [GIFT_REQUEST, RECEIPT_REQUEST, GIFT_SYSTEM],
+      failures: [GIFT_REQUEST, RECEIPT_REQUEST, GIFT_SYSTEM])
+    assert_subset(report.dig("jobs", "minitest"),
+      selected: [GIFT_UNIT, RACK_REQUEST, RECEIPT_SYSTEM],
+      failures: [GIFT_UNIT, RECEIPT_SYSTEM])
+    %w[rspec minitest].each do |name|
+      assert_equal %w[no yes no], observed_calls(name), "discover then selected then full"
+      assert report.dig("jobs", name, "comparison_performed")
+    end
+  end
+
+  def test_enforce_keeps_full_fallback_for_rails_and_bundle_changes
+    base = prepare_observed_jobs
+    # Each path is tested on its own diff, with a real full Rails/RSpec run.
+    %w[config/feature_flags.rb Gemfile Gemfile.lock].each do |path|
+      write(path, "# shared dependency fixture\n")
+      commit("change shared dependency")
+      report = mode_cli("check", "--base", base, "--mode", "enforce", "--seed", "1234")
+      report.fetch("jobs").each do |name, job|
+        assert_equal "full", job.fetch("mode")
+        assert_includes job.fetch("reason"), path
+        assert_equal 4, job.fetch("full_count")
+        assert_empty job.fetch("full_failures")
+        assert_nil job.fetch("full_only_failures")
+        refute job.fetch("comparison_performed")
+        assert_equal %w[no no], observed_calls(name), "discover then full once"
+        File.delete(File.join(@root, "tmp-#{name}-invocations.log"))
+      end
+      base = cmd("git", "rev-parse", "HEAD")
+    end
+  end
+
+  def test_enforce_no_diff_does_not_skip_a_runner_that_cannot_start
+    write(".sukashi.yml", <<~YAML)
+      jobs:
+        broken:
+          runner: rspec
+          command: [./nonexistent-test-runner]
+    YAML
+    commit("configure unavailable runner")
+    base = cmd("git", "rev-parse", "HEAD")
+    report = mode_cli("check", "--base", base, "--mode", "enforce", code: 1)
+    job = report.fetch("jobs").fetch("broken")
+    assert_equal "full", job.fetch("mode")
+    refute job.fetch("ok")
+    refute report.fetch("ok")
+    assert job.fetch("full_only_job")
+    refute job.fetch("comparison_performed")
+  end
+
+  def test_enforce_no_diff_does_not_skip_a_suite_with_load_errors
+    write(".sukashi.yml", <<~YAML)
+      jobs:
+        broken:
+          runner: rspec
+          command: [bundle, exec, rspec, spec/broken_spec.rb]
+    YAML
+    write("spec/broken_spec.rb", 'raise "fixture load failure"' + "\n")
+    commit("configure broken suite")
+    base = cmd("git", "rev-parse", "HEAD")
+    report = mode_cli("check", "--base", base, "--mode", "enforce", code: 1)
+    job = report.fetch("jobs").fetch("broken")
+    assert_equal "full", job.fetch("mode")
+    refute job.fetch("ok")
+    refute report.fetch("ok")
+    assert job.fetch("full_only_job")
+  end
 end
