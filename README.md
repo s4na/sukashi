@@ -64,6 +64,25 @@ ignore: ["docs/**/*.md"]
 
 [検証用Railsアプリとシナリオ一覧](fixtures/rails_app/README.md)
 
+
+## 大規模リポジトリでの解析コスト
+
+`Large repository benchmark` ワークフローは、固定した Mastodon v4.3.0 の
+Ruby ソースを対象に、`sukashi plan` の実時間と Ruby プロセスの peak RSS を計測します。
+実測値は Actions の Summary と `large-repository-benchmark` artifact に保存されます。
+
+- 変更前後の全 Ruby ファイルを索引化したことを検証し、早期 fallback だけを計測することを防ぎます。
+- 各回を新しい Ruby プロセスで 3 回実行します。OS のファイルキャッシュは消去しません。
+- テスト一覧は架空の 2 テストです。Mastodon 自体の起動やテスト実行は含みません。
+  したがって、実アプリの end-to-end の所要時間やテスト短縮率を表す数値ではありません。
+- RSS は親 Ruby プロセスの Linux VmHWM で、git やテスト一覧取得の子プロセスの
+  メモリ合計ではありません。実時間にはこれらの子プロセスを含みます。
+
+導入時は、この解析コストにアプリ起動・テスト一覧取得の時間を加え、削減できるテスト時間と
+比較してください。数値は runner・Ruby・Prism のバージョンに依存します。
+キャッシュや解析対象の除外は選択結果の正しさにも関わるため、計測結果と回帰テストなしに
+追加しません。計測は AGENTS.md に従い GitHub Actions 上でのみ実行します。
+
 ## 参考元とライセンス
 
 Sukashi は [GitLab 版 Crystalball](https://gitlab.com/gitlab-org/ruby/gems/crystalball) と [GitLab での導入](https://gitlab.com/gitlab-org/gitlab/-/merge_requests/44968) を参考にしています。Crystalball の実行時カバレッジによる対応表とは異なり、現在の Sukashi は Prism による静的解析で候補を選び、全件実行と照合します。Crystalball を gem の依存には含めていません。

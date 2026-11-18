@@ -1,0 +1,35 @@
+name: Large repository benchmark
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'benchmark/**'
+      - '.github/workflows/benchmark.yml'
+      - 'lib/**'
+permissions:
+  contents: read
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BUNDLE_GEMFILE: ${{ github.workspace }}/Gemfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0'
+          bundler-cache: true
+      - uses: actions/checkout@v4
+        with:
+          repository: mastodon/mastodon
+          ref: ab36c152f9e5f9054798504354365dcaef4e5c43
+          path: benchmark-corpus
+          persist-credentials: false
+      - name: Measure fresh-process plan time and peak RSS
+        run: bundle exec ruby benchmark/large_repository.rb benchmark-corpus benchmark-results
+      - uses: actions/upload-artifact@v4
+        with:
+          name: large-repository-benchmark
+          path: benchmark-results/
+          if-no-files-found: error
