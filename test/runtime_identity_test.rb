@@ -92,7 +92,7 @@ class RuntimeIdentityTest < Minitest::Test
 
   def test_unchanged_locked_environment_reuses_selection_without_exposing_paths
     value = plan
-    assert_equal "verified", value.dig("runtime", "unit", "status")
+    assert_equal "verified", value.dig("runtime", "unit", "status"), value.fetch("runtime").inspect
     assert_equal "subset", value.dig("jobs", "unit", "mode")
     identity = JSON.generate(value.fetch("runtime"))
     refute_includes identity, @tmp

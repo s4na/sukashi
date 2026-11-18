@@ -20,6 +20,9 @@ module Sukashi
           unless spec.name == "sukashi" && File.realpath(spec.full_gem_path) == own_root
             return opaque("mutable_dependency")
           end
+        elsif source.is_a?(Bundler::Source::Metadata) && spec.name == "bundler" && spec.version.to_s == Bundler::VERSION
+          # Bundler describes itself as runtime metadata, not a registry gem.
+          # Other unknown or mutable sources must still remain opaque.
         elsif !source.is_a?(Bundler::Source::Rubygems)
           return opaque("dependency_source_unverified")
         end
@@ -33,7 +36,7 @@ module Sukashi
         key.start_with?("BUNDLE_") || %w[RUBYOPT RUBYLIB GEM_HOME GEM_PATH PATH].include?(key)
       end.sort
       payload = [
-        RUBY_DESCRIPTION, RUBY_ENGINE, RUBY_PLATFORM, File.realpath(RbConfig.ruby),
+        RUBY_DESCRIPTION, RUBY_ENGINE, RUBY_PLATFORM, Bundler::VERSION, Gem::VERSION, File.realpath(RbConfig.ruby),
         File.realpath(gemfile), Digest::SHA256.file(gemfile).hexdigest,
         File.realpath(lockfile), Digest::SHA256.file(lockfile).hexdigest,
         specs, code, environment
