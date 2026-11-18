@@ -340,11 +340,27 @@ class SelectionTest < Minitest::Test
         end
       end
     RUBY
+    path = "spec/rails_helper.rb"
+    File.open(File.join(@root, path), "a") do |helper|
+      helper.puts <<~RUBY
+        module BillingRequests
+          def get(path, **options)
+            expect(OrderFee.fee(true)).to eq(500)
+            super
+          end
+        end
+        RSpec.configure { |config| config.include BillingRequests, type: :request }
+      RUBY
+    end
     commit("wrap HTTP helper")
     base = cmd("git", "rev-parse", "HEAD")
     assert cli("check", "--base", base).fetch("ok")
     change_fee("500", "700")
-    job = cli("check", "--base", base, code: 1).dig("jobs", "minitest")
+    report = cli("check", "--base", base, code: 1)
+    specs = report.dig("jobs", "rspec")
+    assert_equal "full", specs.fetch("mode")
+    assert_includes specs.fetch("full_failures"), REGULAR_REQUEST
+    job = report.dig("jobs", "minitest")
     id = "WrappedRequestTest#test_regular_order"
     assert_includes job.fetch("executed_ids"), id
     assert_includes job.fetch("selected_failures"), id

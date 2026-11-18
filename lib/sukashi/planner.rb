@@ -102,7 +102,7 @@ module Sukashi
       rows.each do |row|
         path, line = row.values_at("file", "line")
         if row["custom_protocol"]
-          selected[row["id"]] = "Minitest execution protocol overridden"
+          selected[row["id"]] = "test runner helper or execution protocol overridden"
           next
         end
         if @changed_tests.include?(path) || locations[[path, line]] > 1

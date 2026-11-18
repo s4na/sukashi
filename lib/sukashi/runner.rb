@@ -31,7 +31,12 @@ module Sukashi
         end
         case plain ? "command" : @job.fetch("runner")
         when "rspec"
-          command.concat(["--seed", @seed.to_s, "--format", "json", "--out", File.join(dir, "rspec.json")])
+          formatter = "json"
+          if discover
+            command.concat(["--require", File.expand_path("rspec_inventory.rb", __dir__)])
+            formatter = "Sukashi::RSpecInventory"
+          end
+          command.concat(["--seed", @seed.to_s, "--format", formatter, "--out", File.join(dir, "rspec.json")])
           discover ? command << "--dry-run" : command.concat(["--format", "progress"])
           command.concat(["--require", File.expand_path("rspec_selection.rb", __dir__)]) if ids
         when "minitest"
@@ -59,7 +64,8 @@ module Sukashi
         if @job["runner"] == "rspec"
           return if data.fetch("summary").fetch("errors_outside_of_examples_count", 0).positive?
           data.fetch("examples").map do |e|
-            { "id" => e.fetch("id"), "file" => e.fetch("file_path"), "line" => e.fetch("line_number"), "status" => e.fetch("status") }
+            { "id" => e.fetch("id"), "file" => e.fetch("file_path"), "line" => e.fetch("line_number"),
+              "status" => e.fetch("status"), "custom_protocol" => e["custom_protocol"] }
           end
         else
           data
