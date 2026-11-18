@@ -9,6 +9,29 @@ module SukashiMinitest
     File.rename(path + ".tmp", path)
   end
 
+  # Discover wrappers on the actual loaded class. Checking the Minitest
+  # protocol also catches inherited/prepended overrides and custom assertions.
+  def self.custom_protocol?(suite)
+    return true unless suite <= Minitest::Test
+    base = Minitest::Test
+    @protocol ||= (base.instance_methods | base.private_instance_methods).to_h { |name| [name, base.instance_method(name)] }
+    if @patched_base.nil?
+      root = Dir.pwd + File::SEPARATOR
+      bundled = Gem.loaded_specs.values.map(&:full_gem_path).select { |p| p.start_with?(root) }
+      @patched_base = @protocol.values.any? do |method|
+        source = method.source_location&.first
+        next false unless source && File.file?(source)
+        file = File.expand_path(source)
+        file.start_with?(root) && bundled.none? { |p| file.start_with?(p + File::SEPARATOR) }
+      end
+    end
+    @patched_base || @protocol.any? do |name, original|
+      suite.instance_method(name).owner != original.owner
+    rescue NameError
+      true # the suite removed or undefined a method used by the runner
+    end
+  end
+
   class Reporter < Minitest::AbstractReporter
     def initialize
       super
@@ -44,9 +67,10 @@ def SukashiMinitest.install(options)
         exit 2 if options[:exclude] || (options[:filter] && options[:filter] != "/./")
         names = suite.runnable_methods
       end
+      custom_protocol = !names.empty? && SukashiMinitest.custom_protocol?(suite)
       names.map do |name|
         file, line = suite.instance_method(name).source_location
-        { "id" => "#{suite}##{name}", "file" => file, "line" => line }
+        { "id" => "#{suite}##{name}", "file" => file, "line" => line, "custom_protocol" => custom_protocol }
       end
     end
     SukashiMinitest.write(rows)

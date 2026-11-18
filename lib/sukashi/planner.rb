@@ -101,6 +101,10 @@ module Sukashi
       reached = Hash.new { |h, k| h[k] = Set.new }
       rows.each do |row|
         path, line = row.values_at("file", "line")
+        if row["custom_protocol"]
+          selected[row["id"]] = "Minitest execution protocol overridden"
+          next
+        end
         if @changed_tests.include?(path) || locations[[path, line]] > 1
           selected[row["id"]] = "changed test or shared definition"
           next

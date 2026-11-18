@@ -15,7 +15,7 @@ module Sukashi
     ACTION_CALLBACK = /\A(?:(?:append|prepend)_)?(?:before|after|around)_action\z/
     MINITEST_HOOKS = %i[before_setup setup after_setup before_teardown teardown after_teardown].freeze
 
-    attr_reader :sources, :methods, :definitions, :tests, :routes, :dependencies, :errors, :hooks, :unscoped_hooks, :controller_hooks, :custom_http_pipeline
+    attr_reader :sources, :methods, :definitions, :tests, :routes, :dependencies, :errors, :hooks, :unscoped_hooks, :controller_hooks, :custom_http_pipeline, :refinement_scopes
 
     def initialize(sources)
       @sources = sources
@@ -32,6 +32,7 @@ module Sukashi
       @unscoped_hooks = Set.new
       @controller_hooks = Set.new
       @custom_http_pipeline = false
+      @refinement_scopes = Set.new
       @open_dispatch = Set.new
       @assigned_constants = Set.new
       @constant_owners = Hash.new { |h, k| h[k] = Set.new }
@@ -188,6 +189,10 @@ module Sukashi
         if in_example_group && !node.receiver && %i[it specify example let let! subject subject! before after around].include?(node.name) &&
            node.block.is_a?(Prism::BlockNode) && node.block.body
           @local_bodies[path] << node.block.body.location
+        end
+        refinement_scopes << path if node.name == :using
+        if node.name == :refine
+          @open_dispatch << dispatch_owner(node.arguments&.arguments&.first, owner)
         end
         if %i[const_set remove_const autoload].include?(node.name)
           arg = node.arguments&.arguments&.first

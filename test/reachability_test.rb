@@ -115,6 +115,19 @@ class ReachabilityTest < Minitest::Test
     assert_includes idx.unscoped_hooks, path
   end
 
+  def test_refinements_keep_calls_with_lexically_changed_dispatch
+    path = "test/fee_test.rb"
+    src = "class T; def test_fee; Fee.fee(false); end; end"
+    target = { ["Fee", true, :fee] => { paths: ["lib/fee.rb"], arms: [true] } }
+    [
+      { path => "using ExternalOverrides; #{src}" },
+      { path => src, "override.rb" => "module Alternate; refine(Fee.singleton_class) { def fee(arg); super(true); end }; end" }
+    ].each do |extra|
+      idx = Sukashi::SourceIndex.new(index("500").sources.merge(extra))
+      assert_equal :unknown, Sukashi::Reachability.new(idx, target, Set[path], Set.new).inspect_test(path, 1)
+    end
+  end
+
   def test_wrapped_class_method_is_not_a_proven_branch
     ["Fee.singleton_class.prepend(Override)", "Fee.extend(Override)", "class Fee; class << self; prepend Override; end; end"].each do |wrapper|
       path = "test/fee_test.rb"

@@ -209,6 +209,29 @@ class SelectionTest < Minitest::Test
     assert_equal ["./spec/requests/orders_spec.rb[1:1]", "./spec/requests/orders_spec.rb[1:2]"], decision.fetch("selected").keys
   end
 
+  def test_inherited_minitest_run_override_keeps_the_wrapped_test
+    write("test/wrapped_test.rb", <<~RUBY)
+      require "minitest/autorun"
+      require_relative "../app/models/order_fee"
+      class WrapperTest < Minitest::Test
+        def run
+          OrderFee.fee(true)
+          super
+        end
+      end
+      class WrappedTest < WrapperTest
+        def test_regular
+          assert_equal 100, OrderFee.fee(false)
+        end
+      end
+    RUBY
+    commit("add wrapped suite")
+    base = cmd("git", "rev-parse", "HEAD")
+    change_fee("500", "700")
+    decision = cli("plan", "--base", base).dig("jobs", "minitest")
+    assert_equal ["GiftTest#test_fee", "WrappedTest#test_regular"], decision.fetch("selected").keys
+  end
+
   def test_predicate_change_runs_all_tests
     change_fee("if gift", "unless gift")
     report = cli("check", "--base", @base, code: 1)

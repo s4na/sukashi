@@ -71,7 +71,7 @@ module Sukashi
       @evidence = []
       @unknown = false
       return :file if @broad_users.include?(path)
-      return :unknown if @global_hook || @hook_users.include?(path)
+      return :unknown if @global_hook || @hook_users.include?(path) || @index.refinement_scopes.include?(path)
       nodes = @index.tests[[path, line]]
       return :unknown unless nodes.one?
       trace(nodes.first.body, {}, [])
@@ -152,7 +152,7 @@ module Sukashi
         body = method.node.body
         return @unknown = true unless body.is_a?(Prism::StatementsNode) && plain_render?(body.body.last)
       end
-      return @unknown = true if @controller_users.include?(method.path)
+      return @unknown = true if @controller_users.include?(method.path) || @index.refinement_scopes.include?(method.path)
       if @targets.key?(key)
         arm = values.first
         return @unknown = true unless arm == true || arm == false
