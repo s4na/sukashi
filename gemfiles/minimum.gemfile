@@ -1,0 +1,12 @@
+source "https://rubygems.org"
+gemspec path: ".."
+
+gem "prism", "~> 1.4.0"
+gem "minitest", "~> 5.25.0"
+gem "rspec", "~> 3.13.0"
+gem "rspec-rails", "~> 7.1"
+gem "railties", "~> 7.2.0"
+gem "capybara", "~> 3.40"
+# Newer IRB/RDoc releases require Prism beyond the supported lower bound.
+gem "irb", "~> 1.14.0"
+gem "rdoc", "~> 6.11.0"

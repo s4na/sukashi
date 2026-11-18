@@ -6,15 +6,30 @@ permissions:
   contents: read
 jobs:
   test:
+    name: Ruby ${{ matrix.ruby }} / ${{ matrix.dependencies }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { ruby: '3.2', dependencies: minimum, gemfile: gemfiles/minimum.gemfile }
+          - { ruby: '3.3', dependencies: minimum, gemfile: gemfiles/minimum.gemfile }
+          - { ruby: '3.4', dependencies: current, gemfile: gemfiles/current.gemfile }
+          - { ruby: '4.0', dependencies: locked, gemfile: Gemfile }
+    env:
+      BUNDLE_GEMFILE: ${{ matrix.gemfile }}
     steps:
       - uses: actions/checkout@v4
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '4.0'
+          ruby-version: ${{ matrix.ruby }}
+          bundler: '2.6.9'
           bundler-cache: true
+      - name: Record resolved dependency versions
+        run: bundle list
       - run: bundle exec ruby -Itest -e 'Dir["test/*_test.rb"].sort.each { |file| require_relative file }'
       - name: Verify the stamped gem
+        if: matrix.dependencies == 'locked'
         shell: bash
         run: |
           read -r previous _ < RELEASE
