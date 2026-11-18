@@ -83,6 +83,15 @@ Ruby ソースを対象に、`sukashi plan` の実時間と Ruby プロセスの
 キャッシュや解析対象の除外は選択結果の正しさにも関わるため、計測結果と回帰テストなしに
 追加しません。計測は AGENTS.md に従い GitHub Actions 上でのみ実行します。
 
+### 初回の実測値
+
+[Actions の計測結果](https://github.com/s4na/sukashi/actions/runs/44422239157)では、
+Mastodon `ab36c152f9e5f9054798504354365dcaef4e5c43` の前後それぞれ 2,515 ファイルを索引化し、
+Ruby 4.0.9 / Prism 2.1.0 / ubuntu-latest で実時間の中央値は **2.834 秒**、
+親プロセスの最大 peak RSS は **166,248 KiB（約 162.4 MiB）**でした。
+3 回の実時間は 2.836 / 2.834 / 2.813 秒です。判定はいずれも全件実行（all tests are candidates）でした。
+上記の架空テストを使った解析費用の参考値であり、アプリのテスト短縮率や他の環境での性能保証ではありません。
+
 ## 参考元とライセンス
 
 Sukashi は [GitLab 版 Crystalball](https://gitlab.com/gitlab-org/ruby/gems/crystalball) と [GitLab での導入](https://gitlab.com/gitlab-org/gitlab/-/merge_requests/44968) を参考にしています。Crystalball の実行時カバレッジによる対応表とは異なり、現在の Sukashi は Prism による静的解析で候補を選び、全件実行と照合します。Crystalball を gem の依存には含めていません。
