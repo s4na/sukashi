@@ -1,0 +1,3 @@
+#!/usr/bin/env ruby
+require_relative "../lib/sukashi/cli"
+exit Sukashi::CLI.call(ARGV)
