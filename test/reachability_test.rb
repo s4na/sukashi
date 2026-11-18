@@ -46,6 +46,19 @@ class ReachabilityTest < Minitest::Test
     end
   end
 
+  def test_request_using_a_named_route_helper_can_execute_either_arm
+    path = "test/orders_test.rb"
+    sources = index("500").sources.merge(
+      "config/routes.rb" => 'Rails.application.routes.draw { resources :orders }',
+      "orders.rb" => "class OrdersController; def index; render plain: Fee.fee(false); end; end",
+      path => "class T; def orders_path; Fee.fee(true); '/orders'; end\n  def test_named; get orders_path; end\n  def test_literal; get '/orders'; end; end"
+    )
+    target = { ["Fee", true, :fee] => { paths: ["lib/fee.rb"], arms: [true] } }
+    reach = Sukashi::Reachability.new(Sukashi::SourceIndex.new(sources), target, Set[path], Set.new)
+    assert_equal :unknown, reach.inspect_test(path, 2)
+    assert_equal :other_arm, reach.inspect_test(path, 3)
+  end
+
   def test_rack_middleware_keeps_http_paths_without_widening_unit_tests
     sources = index("500").sources.merge(
       "orders.rb" => "class OrdersController; def show; render plain: Fee.fee(false); end; end",

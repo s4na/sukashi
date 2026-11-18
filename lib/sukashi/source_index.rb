@@ -244,12 +244,9 @@ module Sukashi
     end
 
     def lookup(verb, node)
-      return unless @simple
-      path = case node
-      when Prism::StringNode then node.unescaped
-      when Prism::CallNode then node.name.to_s if !node.receiver && !node.arguments
-      end
-      entries = @entries[[verb, path]]
+      # Calling a named route helper can execute project code before dispatch.
+      return unless @simple && node.is_a?(Prism::StringNode)
+      entries = @entries[[verb, node.unescaped]]
       entries.first if entries.one?
     end
 
@@ -260,8 +257,8 @@ module Sukashi
       args = node.arguments&.arguments || []
       if node.name == :resources && args.one? && args.first.is_a?(Prism::SymbolNode)
         name = args.first.unescaped
-        register(:get, "/" + name, name, "index", name)
-        register(:post, "/" + name, name, "create", name)
+        register(:get, "/" + name, name, "index")
+        register(:post, "/" + name, name, "create")
       elsif HTTP.include?(node.name) && args.size == 2 && args.first.is_a?(Prism::StringNode) && args.last.is_a?(Prism::KeywordHashNode)
         options = {}
         args.last.elements.each do |assoc|
@@ -272,17 +269,16 @@ module Sukashi
         target = options["to"]&.match(/\A([a-z_]+)#([a-z_]\w*)\z/)
         path = args.first.unescaped.delete_prefix("/")
         return unless target && path.match?(%r{\A[\w/-]*\z})
-        register(node.name, "/" + path, target[1], target[2], options["as"])
+        register(node.name, "/" + path, target[1], target[2])
       else
         return false
       end
       true
     end
 
-    def register(verb, path, controller, action, helper)
+    def register(verb, path, controller, action)
       key = [controller.split("_").map(&:capitalize).join + "Controller", false, action.to_sym]
       @entries[[verb, path]] << key
-      @entries[[verb, helper + "_path"]] << key if helper
     end
   end
 end
