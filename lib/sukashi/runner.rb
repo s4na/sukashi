@@ -3,7 +3,7 @@ require "tmpdir"
 require "pathname"
 
 module Sukashi
-  Result = Struct.new(:ok, :rows, :seconds, keyword_init: true) do
+  Result = Struct.new(:ok, :rows, :seconds, :exit_status, keyword_init: true) do
     def ids
       rows&.map { |r| r.fetch("id") }&.sort
     end
@@ -46,8 +46,9 @@ module Sukashi
                      "SUKASHI_REPORT_DIR" => dir, "SUKASHI_DISCOVER" => discover ? "1" : "0")
         end
         ok = system(env, [command.first, command.first], *command.drop(1), out: :err)
+        exit_status = $?.exitstatus
         rows = read_reports(dir) unless plain
-        Result.new(ok: !!ok, rows: rows, seconds: (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(3))
+        Result.new(ok: !!ok, rows: rows, exit_status: exit_status, seconds: (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(3))
       end
     rescue Errno::E2BIG, Errno::ENOENT => e
       warn e.message
