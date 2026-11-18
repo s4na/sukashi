@@ -13,6 +13,7 @@ jobs:
         with:
           ruby-version: '4.0'
           bundler-cache: true
+      - run: python3 -m pip install jsonschema==4.23.0
       - run: bundle exec ruby -Itest -e 'Dir["test/*_test.rb"].sort.each { |file| require_relative file }'
       - name: Verify the stamped gem
         shell: bash

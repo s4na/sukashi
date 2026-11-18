@@ -60,9 +60,15 @@ ignore: ["docs/**/*.md"]
 
 初版は、真偽値の仮引数を直接調べるクラスメソッドの `if ... else ... end` で、片側のリテラルなどの変更を識別します。リテラル引数を直接渡すテストや、URLを文字列リテラルで指定したRailsルート → action → クラスメソッドの経路なら反対側だけを通るテストを省けます。controllerの応答を追えるのは単純な `render plain:` までです。アプリで設定したRack middlewareがあるHTTP経路、暗黙の描画、テンプレート・layoutの描画、prepend等によるメソッドの差し替えは未解決として残します。条件の変更、移動・削除などは両版のファイル依存に広げます。動的な呼び出し・共有setupは候補に残し、parse失敗、未分類の変更、比較元の欠落などでは全件実行に戻ります。RSpecグループ内の `let` や `before` は、そのファイルと利用元を候補に残します。controllerの `before_action` は、そのcontrollerや継承先を通る経路に影響します。共通helperの `fixtures :all` や `config.before` のように帰属を限定できないフックがある場合は、全件に戻るため削減できません。全件照合で失敗を再現できることが、選択漏れを検出する条件です。
 
-開発時の検証は `bundle install` の後、`bundle exec ruby -Itest -e 'Dir["test/*_test.rb"].sort.each { |f| require_relative f }'` で実行します。
+開発時の動作確認は GitHub Actions の Tests で実行します。JSON Schema の検証には CI 専用の Python jsonschema を使います。
 
 [検証用Railsアプリとシナリオ一覧](fixtures/rails_app/README.md)
+
+## JSONの互換性
+
+plan と comparison report は `version`（メジャー）と `schema_minor`（マイナー）を持ちます。現在は 1.1 です。キー・理由コードの追加はマイナー、既存キーの削除・型や意味の変更はメジャーを更新します。利用側は未知のキー・理由コードを許容してください。既存の理由文字列は残し、集計には `reason_detail.code`、`selected_details`、`excluded_details` を使います。
+
+[JSON契約と理由コード](docs/json-contract.md) · [plan schema](schema/plan.v1.json) · [report schema](schema/report.v1.json)
 
 ## 参考元とライセンス
 

@@ -1,0 +1,310 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sukashi plan major version 1",
+  "type": "object",
+  "required": [
+    "version",
+    "base",
+    "head",
+    "config",
+    "seed",
+    "jobs",
+    "plan_seconds"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "schema_minor": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "base": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "head": {
+      "type": "string"
+    },
+    "config": {
+      "type": "string"
+    },
+    "seed": {
+      "type": "integer"
+    },
+    "jobs": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "mode",
+          "inventory"
+        ],
+        "properties": {
+          "mode": {
+            "enum": [
+              "full",
+              "subset",
+              "skip"
+            ]
+          },
+          "inventory": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "uniqueItems": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "reason_detail": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "working_tree_changed",
+                  "merge_base_unavailable",
+                  "no_executable_changes",
+                  "inventory_unavailable",
+                  "shared_dependency",
+                  "parse_failed",
+                  "source_unavailable",
+                  "shared_setup_changed",
+                  "no_test_dependency",
+                  "custom_test_protocol",
+                  "changed_test",
+                  "other_test_file",
+                  "changed_arm",
+                  "changed_file",
+                  "unresolved_path",
+                  "unchanged_arm",
+                  "no_dependency",
+                  "no_selection",
+                  "all_candidates",
+                  "invalid_plan",
+                  "legacy_reason"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "paths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": true
+          },
+          "selected": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "excluded": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "selected_details": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": [
+                "code",
+                "message"
+              ],
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "working_tree_changed",
+                    "merge_base_unavailable",
+                    "no_executable_changes",
+                    "inventory_unavailable",
+                    "shared_dependency",
+                    "parse_failed",
+                    "source_unavailable",
+                    "shared_setup_changed",
+                    "no_test_dependency",
+                    "custom_test_protocol",
+                    "changed_test",
+                    "other_test_file",
+                    "changed_arm",
+                    "changed_file",
+                    "unresolved_path",
+                    "unchanged_arm",
+                    "no_dependency",
+                    "no_selection",
+                    "all_candidates",
+                    "invalid_plan",
+                    "legacy_reason"
+                  ]
+                },
+                "message": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "paths": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "excluded_details": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": [
+                "code",
+                "message"
+              ],
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "working_tree_changed",
+                    "merge_base_unavailable",
+                    "no_executable_changes",
+                    "inventory_unavailable",
+                    "shared_dependency",
+                    "parse_failed",
+                    "source_unavailable",
+                    "shared_setup_changed",
+                    "no_test_dependency",
+                    "custom_test_protocol",
+                    "changed_test",
+                    "other_test_file",
+                    "changed_arm",
+                    "changed_file",
+                    "unresolved_path",
+                    "unchanged_arm",
+                    "no_dependency",
+                    "no_selection",
+                    "all_candidates",
+                    "invalid_plan",
+                    "legacy_reason"
+                  ]
+                },
+                "message": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "paths": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "branches": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "path",
+                "method",
+                "arm",
+                "reachable_ids"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "method": {
+                  "type": "string"
+                },
+                "arm": {
+                  "enum": [
+                    "then",
+                    "else"
+                  ]
+                },
+                "reachable_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "uniqueItems": true
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "file_level_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "mode": {
+                  "const": "subset"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "selected",
+                "excluded",
+                "file_level_count",
+                "branches"
+              ],
+              "properties": {
+                "selected": {
+                  "minProperties": 1
+                }
+              }
+            },
+            "else": {
+              "required": [
+                "reason"
+              ]
+            }
+          }
+        ],
+        "additionalProperties": true
+      }
+    },
+    "plan_seconds": {
+      "type": "number",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": true
+}
