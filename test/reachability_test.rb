@@ -38,12 +38,26 @@ class ReachabilityTest < Minitest::Test
     prefixes = ["", "prepend_", "append_"]
     registrations = prefixes.product(%w[before_action around_action after_action]).map { |prefix, name| "#{prefix}#{name} :charge" }
     registrations << "set_callback :process_action, :after, :charge"
+    registrations << "def render(...); Fee.fee(true); super; end"
+    registrations << "def charge; Fee.fee(true); end; alias render charge"
     registrations.each do |registration|
       sources["base.rb"] = "class BaseController; #{registration}; end"
       reach = Sukashi::Reachability.new(Sukashi::SourceIndex.new(sources), target, Set[path], Set.new)
       assert_equal :other_arm, reach.inspect_test(path, 1), registration
       assert_equal :unknown, reach.inspect_test(path, 2), registration
     end
+  end
+
+  def test_aliased_controller_action_keeps_the_request
+    path = "test/orders_test.rb"
+    sources = index("500").sources.merge(
+      "orders.rb" => "class OrdersController; def regular; render plain: Fee.fee(false); end; def gift; render plain: Fee.fee(true); end; alias regular gift; end",
+      "config/routes.rb" => 'Rails.application.routes.draw { get "/orders", to: "orders#regular" }',
+      path => "class T; def test_fee; get '/orders'; end; end"
+    )
+    target = { ["Fee", true, :fee] => { paths: ["lib/fee.rb"], arms: [true] } }
+    reach = Sukashi::Reachability.new(Sukashi::SourceIndex.new(sources), target, Set[path], Set.new)
+    assert_equal :unknown, reach.inspect_test(path, 1)
   end
 
   def test_request_using_a_named_route_helper_can_execute_either_arm

@@ -13,6 +13,7 @@ module Sukashi
     EXAMPLES = %i[it specify example].freeze
     RSPEC_HOOK = /\A(?:(?:append|prepend)_)?(?:before|after|around)\z/
     ACTION_CALLBACK = /\A(?:(?:append|prepend)_)?(?:before|after|around)_action\z/
+    CONTROLLER_DISPATCH = %i[render render_to_body render_to_string process process_action dispatch send_action].freeze
     MINITEST_HOOKS = %i[before_setup setup after_setup before_teardown teardown after_teardown].freeze
 
     attr_reader :sources, :methods, :definitions, :tests, :routes, :dependencies, :errors, :hooks, :unscoped_hooks, :controller_hooks, :custom_http_pipeline, :refinement_scopes
@@ -159,6 +160,9 @@ module Sukashi
       when Prism::ConstantPathWriteNode, Prism::ConstantPathOrWriteNode,
            Prism::ConstantPathAndWriteNode, Prism::ConstantPathOperatorWriteNode
         @assigned_constants << node.target.name.to_s
+      when Prism::AliasMethodNode, Prism::UndefNode
+        @open_dispatch << owner
+        controller_hooks << path
       when Prism::SingletonClassNode
         @open_dispatch << dispatch_owner(node.expression, owner)
       when Prism::DefNode
@@ -172,6 +176,7 @@ module Sukashi
         methods[[method_owner, !node.receiver.nil?, node.name]] << MethodBody.new(path: path, owner: method_owner, node: node)
         tests[[path, node.location.start_line]] << node if node.name.to_s.start_with?("test_")
         hooks << path if MINITEST_HOOKS.include?(node.name)
+        controller_hooks << path if CONTROLLER_DISPATCH.include?(node.name)
       when Prism::CallNode
         if GROUPS.include?(node.name) && (self.class.constant(node.receiver) == "RSpec" || (in_example_group && !node.receiver))
           in_example_group = true
