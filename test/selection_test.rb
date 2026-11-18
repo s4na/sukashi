@@ -319,6 +319,39 @@ class SelectionTest < Minitest::Test
     assert_equal [GIFT_UNIT, RECEIPT_SYSTEM, RACK_REQUEST, "WrappedTest#test_regular"].sort, decision.fetch("selected").keys
   end
 
+  def test_inherited_http_helper_can_reach_the_other_arm
+    write("test/wrapped_request_test.rb", <<~RUBY)
+      require "minitest/autorun"
+      require_relative "../config/environment"
+      require "rack/test"
+      class RequestBase < Minitest::Test
+        include Rack::Test::Methods
+        def app
+          Rails.application
+        end
+        def get(path)
+          assert_equal 500, OrderFee.fee(true)
+          super
+        end
+      end
+      class WrappedRequestTest < RequestBase
+        def test_regular_order
+          get "/regular"
+        end
+      end
+    RUBY
+    commit("wrap HTTP helper")
+    base = cmd("git", "rev-parse", "HEAD")
+    assert cli("check", "--base", base).fetch("ok")
+    change_fee("500", "700")
+    job = cli("check", "--base", base, code: 1).dig("jobs", "minitest")
+    id = "WrappedRequestTest#test_regular_order"
+    assert_includes job.fetch("executed_ids"), id
+    assert_includes job.fetch("selected_failures"), id
+    assert_includes job.fetch("full_failures"), id
+    assert_empty job.fetch("full_only_failures")
+  end
+
   def test_predicate_change_runs_all_tests
     change_fee("if gift", "unless gift")
     report = cli("check", "--base", @base, code: 1)

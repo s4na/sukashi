@@ -9,10 +9,25 @@ module SukashiMinitest
     File.rename(path + ".tmp", path)
   end
 
+  # Route tracing assumes the framework's HTTP helper actually sends the
+  # request. A project helper can perform other work before calling super.
+  def self.custom_request_helper?(suite)
+    @request_libraries ||= %w[actionpack rack-test capybara].filter_map do |name|
+      spec = Gem.loaded_specs[name]
+      spec.full_gem_path + File::SEPARATOR if spec
+    end
+    %i[get post put patch delete visit].any? do |name|
+      next false unless suite.method_defined?(name) || suite.private_method_defined?(name)
+      source = suite.instance_method(name).source_location&.first
+      !source || !File.expand_path(source).start_with?(*@request_libraries)
+    end
+  end
+
   # Discover wrappers on the actual loaded class. Checking the Minitest
   # protocol also catches inherited/prepended overrides and custom assertions.
   def self.custom_protocol?(suite)
     return true unless suite <= Minitest::Test
+    return true if custom_request_helper?(suite)
     base = Minitest::Test
     @protocol ||= (base.instance_methods | base.private_instance_methods).to_h { |name| [name, base.instance_method(name)] }
     if @patched_base.nil?
