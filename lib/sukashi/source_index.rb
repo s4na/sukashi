@@ -203,7 +203,10 @@ module Sukashi
           arg = node.arguments&.arguments&.first
           @assigned_constants << ([Prism::StringNode, Prism::SymbolNode].include?(arg.class) ? arg.unescaped : nil)
         end
-        if %i[prepend extend define_singleton_method define_method alias_method class_eval class_exec module_eval].include?(node.name)
+        if node.name == :eval
+          @open_dispatch << nil # A binding can refer to any receiver.
+        elsif %i[prepend extend define_singleton_method define_method alias_method remove_method undef_method
+                 class_eval class_exec module_eval module_exec instance_eval instance_exec].include?(node.name)
           @open_dispatch << dispatch_owner(node.receiver, owner)
         end
         # Initializers can retain the middleware stack and mutate it later.

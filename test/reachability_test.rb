@@ -156,7 +156,12 @@ class ReachabilityTest < Minitest::Test
   end
 
   def test_wrapped_class_method_is_not_a_proven_branch
-    ["Fee.singleton_class.prepend(Override)", "Fee.extend(Override)", "class Fee; class << self; prepend Override; end; end"].each do |wrapper|
+    wrappers = ["Fee.singleton_class.prepend(Override)", "Fee.extend(Override)", "class Fee; class << self; prepend Override; end; end"]
+    %w[instance_eval instance_exec module_eval module_exec class_eval class_exec].each do |api|
+      wrappers << "Fee.#{api} { def fee(arg); saved_fee(true); end }"
+    end
+    wrappers << 'eval("def self.fee(arg); saved_fee(true); end", fee_binding)'
+    wrappers.each do |wrapper|
       path = "test/fee_test.rb"
       sources = index("500").sources.merge("overrides.rb" => wrapper, path => "class T; def test_fee; Fee.fee(false); end; end")
       target = { ["Fee", true, :fee] => { paths: ["lib/fee.rb"], arms: [true] } }
