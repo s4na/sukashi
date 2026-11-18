@@ -53,6 +53,7 @@ module Sukashi
         "selected_failures" => sample&.failures, "full_only_failures" => missing,
         "inventory_drift" => !!drift, "full_only_job" => opaque,
         "selected_seconds" => sample&.seconds, "full_seconds" => full.seconds,
+        "selected_status" => sample&.status, "full_status" => full.status,
         "ok" => full.ok && !drift && (!subset || sample.ok) && missing.empty?
       }
     end

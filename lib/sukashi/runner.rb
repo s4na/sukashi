@@ -1,9 +1,10 @@
 require "json"
 require "tmpdir"
 require "pathname"
+require_relative "diagnostics"
 
 module Sukashi
-  Result = Struct.new(:ok, :rows, :seconds, keyword_init: true) do
+  Result = Struct.new(:ok, :rows, :seconds, :status, keyword_init: true) do
     def ids
       rows&.map { |r| r.fetch("id") }&.sort
     end
@@ -20,7 +21,7 @@ module Sukashi
 
     def invoke(discover: false, ids: nil, plain: false)
       started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      return Result.new(ok: false) if discover && @job["runner"] == "command"
+      return Result.new(ok: false, status: "unavailable") if discover && @job["runner"] == "command"
       Dir.mktmpdir("sukashi-run") do |dir|
         command = @job.fetch("command").dup
         env = { "SEED" => @seed.to_s, "SUKASHI_SELECT" => nil }
@@ -45,13 +46,14 @@ module Sukashi
                      "RUBYOPT" => [ENV["RUBYOPT"], "-rsukashi_minitest"].compact.join(" "),
                      "SUKASHI_REPORT_DIR" => dir, "SUKASHI_DISCOVER" => discover ? "1" : "0")
         end
+        Diagnostics.command(command)
         ok = system(env, [command.first, command.first], *command.drop(1), out: :err)
         rows = read_reports(dir) unless plain
-        Result.new(ok: !!ok, rows: rows, seconds: (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(3))
+        Result.new(ok: !!ok, rows: rows, status: ok.nil? ? "failed_to_start" : (ok ? "passed" : "failed"), seconds: (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(3))
       end
-    rescue Errno::E2BIG, Errno::ENOENT => e
+    rescue Errno::E2BIG, Errno::ENOENT, Errno::EACCES, Errno::ENOEXEC => e
       warn e.message
-      Result.new(ok: false)
+      Result.new(ok: false, status: "failed_to_start", seconds: (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(3))
     end
 
     private
