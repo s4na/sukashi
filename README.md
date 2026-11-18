@@ -80,3 +80,10 @@ bundle exec sukashi check --base origin/main --retry-full-only
 ```
 
 `--failure-policy missed --retry-full-only` は明示的な緩和です。全件プロセスが通常のテスト失敗コード1で終了し、全件失敗がすべてfull-onlyであり、その全IDが再実行でpassed、再実行プロセスも成功、選択実行成功、ID照合一致の場合だけ成功を許可します。選択実行の失敗、未分類、計測不能、起動不能、シグナル終了、終了コード1以外の失敗は成功にしません。ただし終了コード1にまとめられたテスト外のcleanupエラーまでは判別できません。この緩和を合否判定に使う場合は、その制約を受け入れる必要があります。元の `full_failures` / `full_only_failures` は変更しません。厳密なCIの合否には既定の `strict` を使用してください。再実行には追加のCI時間と副作用があるため、テストが再実行可能な環境でのみ有効にしてください。
+
+
+## 参考元とライセンス
+
+Sukashi は [GitLab 版 Crystalball](https://gitlab.com/gitlab-org/ruby/gems/crystalball) と [GitLab での導入](https://gitlab.com/gitlab-org/gitlab/-/merge_requests/44968) を参考にしています。Crystalball の実行時カバレッジによる対応表とは異なり、現在の Sukashi は Prism による静的解析で候補を選び、全件実行と照合します。Crystalball を gem の依存には含めていません。
+
+Sukashi 自体は [MIT ライセンス](LICENSE)です。GitLab 版 Crystalball のライセンスと著作権表示は [上流の LICENSE](https://gitlab.com/gitlab-org/ruby/gems/crystalball/-/blob/main/LICENSE) を参照してください。今後、上流のコードや文章を取り込む場合は、該当する著作権表示とライセンスを保持し、取り込んだファイルとリビジョンを記録します。
