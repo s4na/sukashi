@@ -106,7 +106,7 @@ module Sukashi
       if !node.receiver && (Routes::HTTP.include?(node.name) || node.name == :visit)
         key = @index.routes&.lookup(node.name == :visit ? :get : node.name, args.first)
         return @unknown = true unless key && args.one?
-        return follow(key, [], stack)
+        return follow(key, [], stack, controller_action: true)
       end
       if (owner = SourceIndex.constant(node.receiver))
         args.each { |a| trace(a, bindings, stack) }
@@ -126,7 +126,7 @@ module Sukashi
          node.receiver.name == :response && !node.receiver.receiver && !node.receiver.arguments
         return
       end
-      if ASSERTIONS.include?(node.name) || (!node.receiver && node.name == :render && !stack.empty?)
+      if ASSERTIONS.include?(node.name) || plain_render?(node)
         trace(node.receiver, bindings, stack)
         args.each { |a| trace(a, bindings, stack) }
       else
@@ -134,10 +134,23 @@ module Sukashi
       end
     end
 
-    def follow(key, values, stack)
+    def plain_render?(node)
+      return false unless node.is_a?(Prism::CallNode) && !node.receiver && node.name == :render && !node.block
+      args = node.arguments&.arguments
+      return false unless args&.one? && args.first.is_a?(Prism::KeywordHashNode) && args.first.elements.one?
+      assoc = args.first.elements.first
+      assoc.is_a?(Prism::AssocNode) && assoc.key.is_a?(Prism::SymbolNode) && assoc.key.unescaped == "plain"
+    end
+
+    def follow(key, values, stack, controller_action: false)
+      return @unknown = true if @index.dynamic_dispatch?(key.first)
       definitions = @index.methods[key]
       return @unknown = true unless definitions.one? && !stack.include?(key)
       method = definitions.first
+      if controller_action
+        body = method.node.body
+        return @unknown = true unless body.is_a?(Prism::StatementsNode) && plain_render?(body.body.last)
+      end
       return @unknown = true if @controller_users.include?(method.path)
       if @targets.key?(key)
         arm = values.first

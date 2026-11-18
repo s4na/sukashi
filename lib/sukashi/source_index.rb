@@ -28,6 +28,7 @@ module Sukashi
       @hooks = Set.new
       @unscoped_hooks = Set.new
       @controller_hooks = Set.new
+      @open_dispatch = Set.new
       @errors = []
       sources.each do |path, text|
         result = Prism.parse(text, filepath: path)
@@ -74,6 +75,11 @@ module Sukashi
       chunks << source.byteslice(offset..)
     end
 
+    def dynamic_dispatch?(owner)
+      @open_dispatch.include?(nil) || @open_dispatch.include?(owner) ||
+        @open_dispatch.include?(owner.to_s.split("::").last)
+    end
+
     def shadowed?(key)
       @shadowed_methods.include?(key)
     end
@@ -112,12 +118,22 @@ module Sukashi
       end
     end
 
+    def dispatch_owner(receiver, lexical_owner)
+      if receiver.is_a?(Prism::CallNode) && receiver.name == :singleton_class
+        receiver = receiver.receiver
+      end
+      return lexical_owner if !receiver || receiver.is_a?(Prism::SelfNode)
+      self.class.constant(receiver)
+    end
+
     def scan(node, path, owner, in_example_group = false)
       case node
       when Prism::ClassNode, Prism::ModuleNode
         name = self.class.constant(node.constant_path)
         owner = [owner, name].compact.join("::") if name
         definitions[name.to_s.split("::").last] << path
+      when Prism::SingletonClassNode
+        @open_dispatch << dispatch_owner(node.expression, owner)
       when Prism::DefNode
         methods[[owner, !node.receiver.nil?, node.name]] << MethodBody.new(path: path, owner: owner, node: node)
         tests[[path, node.location.start_line]] << node if node.name.to_s.start_with?("test_")
@@ -131,6 +147,9 @@ module Sukashi
         if in_example_group && !node.receiver && %i[it specify example let let! subject subject! before after around].include?(node.name) &&
            node.block.is_a?(Prism::BlockNode) && node.block.body
           @local_bodies[path] << node.block.body.location
+        end
+        if %i[prepend extend define_singleton_method define_method alias_method class_eval class_exec module_eval].include?(node.name)
+          @open_dispatch << dispatch_owner(node.receiver, owner)
         end
         record_dsl(node, path)
         if %i[it specify example test].include?(node.name) && node.block.is_a?(Prism::BlockNode)

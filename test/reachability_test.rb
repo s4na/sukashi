@@ -29,7 +29,7 @@ class ReachabilityTest < Minitest::Test
 
   def test_controller_hook_is_scoped_to_the_controller_and_its_descendants
     sources = index("500").sources.merge(
-      "orders.rb" => "class OrdersController < BaseController; def show; Fee.fee(false); end; end",
+      "orders.rb" => "class OrdersController < BaseController; def show; render plain: Fee.fee(false); end; end",
       "config/routes.rb" => 'Rails.application.routes.draw { get "/orders", to: "orders#show" }',
       "test/example_test.rb" => "class ExampleTest; def test_unit; Fee.fee(false); end\n def test_http; get '/orders'; end; end"
     )
@@ -43,6 +43,30 @@ class ReachabilityTest < Minitest::Test
       reach = Sukashi::Reachability.new(Sukashi::SourceIndex.new(sources), target, Set[path], Set.new)
       assert_equal :other_arm, reach.inspect_test(path, 1), registration
       assert_equal :unknown, reach.inspect_test(path, 2), registration
+    end
+  end
+
+  def test_unindexed_views_keep_requests_even_if_the_action_calls_the_other_arm
+    ["render :regular", "render partial: 'fee'", "render plain: 'fee', layout: true", "nil"].each do |response|
+      sources = index("500").sources.merge(
+        "orders.rb" => "class OrdersController; def show; Fee.fee(false); #{response}; end; end",
+        "config/routes.rb" => 'Rails.application.routes.draw { get "/orders", to: "orders#show" }',
+        "test/request_test.rb" => "class RequestTest; def test_fee; get '/orders'; end; end"
+      )
+      target = { ["Fee", true, :fee] => { paths: ["lib/fee.rb"], arms: [true] } }
+      path = "test/request_test.rb"
+      reach = Sukashi::Reachability.new(Sukashi::SourceIndex.new(sources), target, Set[path], Set.new)
+      assert_equal :unknown, reach.inspect_test(path, 1), response
+    end
+  end
+
+  def test_wrapped_class_method_is_not_a_proven_branch
+    ["Fee.singleton_class.prepend(Override)", "Fee.extend(Override)", "class Fee; class << self; prepend Override; end; end"].each do |wrapper|
+      path = "test/fee_test.rb"
+      sources = index("500").sources.merge("overrides.rb" => wrapper, path => "class T; def test_fee; Fee.fee(false); end; end")
+      target = { ["Fee", true, :fee] => { paths: ["lib/fee.rb"], arms: [true] } }
+      reach = Sukashi::Reachability.new(Sukashi::SourceIndex.new(sources), target, Set[path], Set.new)
+      assert_equal :unknown, reach.inspect_test(path, 1), wrapper
     end
   end
 
