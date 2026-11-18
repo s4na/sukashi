@@ -76,30 +76,7 @@
             ],
             "properties": {
               "code": {
-                "type": "string",
-                "enum": [
-                  "working_tree_changed",
-                  "merge_base_unavailable",
-                  "no_executable_changes",
-                  "inventory_unavailable",
-                  "shared_dependency",
-                  "parse_failed",
-                  "source_unavailable",
-                  "shared_setup_changed",
-                  "no_test_dependency",
-                  "custom_test_protocol",
-                  "changed_test",
-                  "other_test_file",
-                  "changed_arm",
-                  "changed_file",
-                  "unresolved_path",
-                  "unchanged_arm",
-                  "no_dependency",
-                  "no_selection",
-                  "all_candidates",
-                  "invalid_plan",
-                  "legacy_reason"
-                ]
+                "type": "string"
               },
               "message": {
                 "type": "string"
@@ -138,30 +115,7 @@
               ],
               "properties": {
                 "code": {
-                  "type": "string",
-                  "enum": [
-                    "working_tree_changed",
-                    "merge_base_unavailable",
-                    "no_executable_changes",
-                    "inventory_unavailable",
-                    "shared_dependency",
-                    "parse_failed",
-                    "source_unavailable",
-                    "shared_setup_changed",
-                    "no_test_dependency",
-                    "custom_test_protocol",
-                    "changed_test",
-                    "other_test_file",
-                    "changed_arm",
-                    "changed_file",
-                    "unresolved_path",
-                    "unchanged_arm",
-                    "no_dependency",
-                    "no_selection",
-                    "all_candidates",
-                    "invalid_plan",
-                    "legacy_reason"
-                  ]
+                  "type": "string"
                 },
                 "message": {
                   "type": "string"
@@ -189,30 +143,7 @@
               ],
               "properties": {
                 "code": {
-                  "type": "string",
-                  "enum": [
-                    "working_tree_changed",
-                    "merge_base_unavailable",
-                    "no_executable_changes",
-                    "inventory_unavailable",
-                    "shared_dependency",
-                    "parse_failed",
-                    "source_unavailable",
-                    "shared_setup_changed",
-                    "no_test_dependency",
-                    "custom_test_protocol",
-                    "changed_test",
-                    "other_test_file",
-                    "changed_arm",
-                    "changed_file",
-                    "unresolved_path",
-                    "unchanged_arm",
-                    "no_dependency",
-                    "no_selection",
-                    "all_candidates",
-                    "invalid_plan",
-                    "legacy_reason"
-                  ]
+                  "type": "string"
                 },
                 "message": {
                   "type": "string"

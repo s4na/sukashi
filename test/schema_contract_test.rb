@@ -131,8 +131,24 @@ class SchemaContractTest < Minitest::Test
     Sukashi::Reasons::MESSAGES.each_key do |code|
       assert_includes File.read(File.expand_path("../docs/json-contract.md", __dir__)), code
     end
-    schema = JSON.parse(File.read(File.expand_path("../schema/plan.v1.json", __dir__)))
-    codes = schema.dig("properties", "jobs", "additionalProperties", "properties", "reason_detail", "properties", "code", "enum")
-    assert_equal (Sukashi::Reasons::MESSAGES.keys + ["legacy_reason"]).sort, codes.sort
+  end
+
+  def test_minor_versions_accept_unknown_reason_codes
+    document = plan(repo)
+    document["schema_minor"] = 2
+    document["jobs"]["tests"]["selected_details"].each_value { |detail| detail["code"] = "future_selected_reason" }
+    document["jobs"]["tests"]["excluded_details"].each_value { |detail| detail["code"] = "future_excluded_reason" }
+    validate("plan", document)
+    document = plan(repo([]))
+    document["schema_minor"] = 2
+    document["jobs"]["tests"]["reason_detail"]["code"] = "future_full_reason"
+    validate("plan", document)
+    result = Sukashi::Result.new(ok: true, rows: ROWS, seconds: 0.01)
+    runner = Object.new
+    runner.define_singleton_method(:invoke) { |**_| result }
+    report = stub_method(Sukashi::Runner, :new, runner) { Sukashi::Comparison.new(repo, config, document).run }
+    report["schema_minor"] = 2
+    validate("report", report)
+    assert_equal "future_full_reason", report.dig("jobs", "tests", "reason_detail", "code")
   end
 end
