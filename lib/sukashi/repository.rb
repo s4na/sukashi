@@ -46,7 +46,7 @@ module Sukashi
       paths = git("ls-tree", "-rz", commit).split("\0").filter_map do |entry|
         info, path = entry.split("\t", 2)
         mode, type, oid = info.split
-        [path, oid] if path.end_with?(".rb") && type == "blob" && mode.start_with?("100")
+        [path, oid] if path.end_with?(".rb", ".ru") && type == "blob" && mode.start_with?("100")
       end
       IO.popen(["git", "cat-file", "--batch"], "r+b") do |io|
         paths.to_h do |path, oid|

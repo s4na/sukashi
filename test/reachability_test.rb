@@ -46,6 +46,26 @@ class ReachabilityTest < Minitest::Test
     end
   end
 
+  def test_rack_middleware_keeps_http_paths_without_widening_unit_tests
+    sources = index("500").sources.merge(
+      "orders.rb" => "class OrdersController; def show; render plain: Fee.fee(false); end; end",
+      "config/routes.rb" => 'Rails.application.routes.draw { get "/orders", to: "orders#show" }',
+      "test/fees.rb" => "class T; def test_unit; Fee.fee(false); end\n def test_http; get '/orders'; end; end"
+    )
+    target = { ["Fee", true, :fee] => { paths: ["lib/fee.rb"], arms: [true] } }
+    path = "test/fees.rb"
+    [
+      ["config/initializers/billing.rb", "config.middleware.use BillingMiddleware", :unknown],
+      ["config.ru", "use BillingMiddleware; run Rails.application", :unknown],
+      ["config.ru", "run Rails.application", :other_arm]
+    ].each do |file, config, expected|
+      idx = Sukashi::SourceIndex.new(sources.merge(file => config))
+      reach = Sukashi::Reachability.new(idx, target, Set[path], Set.new)
+      assert_equal :other_arm, reach.inspect_test(path, 1)
+      assert_equal expected, reach.inspect_test(path, 2)
+    end
+  end
+
   def test_unindexed_views_keep_requests_even_if_the_action_calls_the_other_arm
     ["render :regular", "render partial: 'fee'", "render plain: 'fee', layout: true", "nil"].each do |response|
       sources = index("500").sources.merge(

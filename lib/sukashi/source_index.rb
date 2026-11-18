@@ -12,7 +12,7 @@ module Sukashi
     ACTION_CALLBACK = /\A(?:(?:append|prepend)_)?(?:before|after|around)_action\z/
     MINITEST_HOOKS = %i[before_setup setup after_setup before_teardown teardown after_teardown].freeze
 
-    attr_reader :sources, :methods, :definitions, :tests, :routes, :dependencies, :errors, :hooks, :unscoped_hooks, :controller_hooks
+    attr_reader :sources, :methods, :definitions, :tests, :routes, :dependencies, :errors, :hooks, :unscoped_hooks, :controller_hooks, :custom_http_pipeline
 
     def initialize(sources)
       @sources = sources
@@ -28,6 +28,7 @@ module Sukashi
       @hooks = Set.new
       @unscoped_hooks = Set.new
       @controller_hooks = Set.new
+      @custom_http_pipeline = false
       @open_dispatch = Set.new
       @errors = []
       sources.each do |path, text|
@@ -118,6 +119,13 @@ module Sukashi
       end
     end
 
+    def rack_extension?(node)
+      return true if %i[use map].include?(node.name)
+      return false unless node.name == :run
+      arg = node.arguments&.arguments&.first
+      !(arg.is_a?(Prism::CallNode) && arg.name == :application && self.class.constant(arg.receiver) == "Rails")
+    end
+
     def dispatch_owner(receiver, lexical_owner)
       if receiver.is_a?(Prism::CallNode) && receiver.name == :singleton_class
         receiver = receiver.receiver
@@ -150,6 +158,11 @@ module Sukashi
         end
         if %i[prepend extend define_singleton_method define_method alias_method class_eval class_exec module_eval].include?(node.name)
           @open_dispatch << dispatch_owner(node.receiver, owner)
+        end
+        # Initializers can retain the middleware stack and mutate it later.
+        # Also cover Rack::Builder's bare use/map/run DSL in rackup files.
+        if node.name == :middleware || (path.end_with?(".ru") && rack_extension?(node))
+          @custom_http_pipeline = true
         end
         record_dsl(node, path)
         if %i[it specify example test].include?(node.name) && node.block.is_a?(Prism::BlockNode)

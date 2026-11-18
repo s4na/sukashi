@@ -148,6 +148,7 @@ module Sukashi
       return @unknown = true unless definitions.one? && !stack.include?(key)
       method = definitions.first
       if controller_action
+        return @unknown = true if @index.custom_http_pipeline
         body = method.node.body
         return @unknown = true unless body.is_a?(Prism::StatementsNode) && plain_render?(body.body.last)
       end
