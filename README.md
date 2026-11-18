@@ -60,7 +60,17 @@ ignore: ["docs/**/*.md"]
 
 初版は、真偽値の仮引数を直接調べるクラスメソッドの `if ... else ... end` で、片側のリテラルなどの変更を識別します。リテラル引数を直接渡すテストや、URLを文字列リテラルで指定したRailsルート → action → クラスメソッドの経路なら反対側だけを通るテストを省けます。controllerの応答を追えるのは単純な `render plain:` までです。アプリで設定したRack middlewareがあるHTTP経路、暗黙の描画、テンプレート・layoutの描画、prepend等によるメソッドの差し替えは未解決として残します。条件の変更、移動・削除などは両版のファイル依存に広げます。動的な呼び出し・共有setupは候補に残し、parse失敗、未分類の変更、比較元の欠落などでは全件実行に戻ります。RSpecグループ内の `let` や `before` は、そのファイルと利用元を候補に残します。controllerの `before_action` は、そのcontrollerや継承先を通る経路に影響します。共通helperの `fixtures :all` や `config.before` のように帰属を限定できないフックがある場合は、全件に戻るため削減できません。全件照合で失敗を再現できることが、選択漏れを検出する条件です。
 
-開発時の検証は `bundle install` の後、`bundle exec ruby -Itest -e 'Dir["test/*_test.rb"].sort.each { |f| require_relative f }'` で実行します。
+## 開発と公開 API
+
+動作確認は AGENTS.md に従い GitHub Actions 上でのみ実行します。
+Tests ワークフローの `test` は `bundle exec rake test`、
+`ruby-lint` は独立した lint bundle で `bundle exec rubocop --lint` を実行します。
+Rake の既定タスクも test です。Lint の導入では全体のスタイル変更は行いません。
+
+`require "sukashi"` は各コンポーネントを明示的に読み込み、コマンドを実行しません。
+公開する Ruby API は `Sukashi::CLI.call(argv)` です。引数配列は処理中に変更され、
+戻り値は CLI の終了コードです。Planner、Comparison、Repository などは内部実装として扱い、
+互換性を保証する API には含めません。
 
 [検証用Railsアプリとシナリオ一覧](fixtures/rails_app/README.md)
 
