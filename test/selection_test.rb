@@ -196,6 +196,19 @@ class SelectionTest < Minitest::Test
     assert_equal 3, report.dig("jobs", "minitest", "full_count")
   end
 
+  def test_edit_to_group_local_let_selects_only_that_spec_file
+    path = "spec/requests/orders_spec.rb"
+    spec = File.read(File.join(@root, path))
+    spec = spec.sub('  it("regular")', '  let(:amount) { 100 }' + "\n" + '  it("regular")')
+    write(path, spec)
+    commit("add local let")
+    base = cmd("git", "rev-parse", "HEAD")
+    write(path, spec.sub("let(:amount) { 100 }", "let(:amount) { 101 }"))
+    commit("edit local let")
+    decision = cli("plan", "--base", base).dig("jobs", "rspec")
+    assert_equal ["./spec/requests/orders_spec.rb[1:1]", "./spec/requests/orders_spec.rb[1:2]"], decision.fetch("selected").keys
+  end
+
   def test_predicate_change_runs_all_tests
     change_fee("if gift", "unless gift")
     report = cli("check", "--base", @base, code: 1)

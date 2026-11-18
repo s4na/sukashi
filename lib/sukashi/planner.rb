@@ -48,17 +48,23 @@ module Sukashi
       @old, @new = [@base, @head].map { |rev| SourceIndex.new(@repo.ruby_sources(rev)) }
       errors = @old.errors | @new.errors
       return "Prism parse failed: #{errors.join(', ')}" unless errors.empty?
+      @only_local_specs = changes.all? do |left, right|
+        next false unless left && left == right && @test_paths.include?(left)
+        template = @old.local_spec_template(left)
+        template && template == @new.local_spec_template(right)
+      end
       @targets = {}
       @changed_tests = Set.new
       @moved = {}
       old_users, new_users = Set.new, Set.new
+      shared_hooks = ((@old.hooks | @new.hooks) - @test_paths) | @old.unscoped_hooks | @new.unscoped_hooks
       changes.each do |old_path, new_path|
         @moved[new_path] = old_path if new_path && old_path != new_path
         @changed_tests << new_path if @test_paths.include?(new_path)
         if (old_path && !@old.sources.key?(old_path)) || (new_path && !@new.sources.key?(new_path))
           return "source unavailable: #{new_path || old_path}"
         end
-        if [old_path, new_path].compact.any? { |p| (@old.hooks | @new.hooks).include?(p) }
+        if [old_path, new_path].compact.any? { |p| shared_hooks.include?(p) }
           return "shared setup changed: #{new_path || old_path}"
         end
         diff = BranchDiff.between(@old, @new, new_path) if old_path && old_path == new_path
@@ -76,6 +82,7 @@ module Sukashi
           target[:arms] |= [arm]
         end
       end
+      @local_users = old_users | new_users
       @analyses = [Reachability.new(@old, @targets, @test_paths, old_users),
                    Reachability.new(@new, @targets, @test_paths, new_users)]
       nil
@@ -96,6 +103,10 @@ module Sukashi
         path, line = row.values_at("file", "line")
         if @changed_tests.include?(path) || locations[[path, line]] > 1
           selected[row["id"]] = "changed test or shared definition"
+          next
+        end
+        if @only_local_specs && path && !@local_users.include?(path)
+          excluded[row["id"]] = "only local test bodies changed in other files"
           next
         end
         verdicts = [@analyses.first.inspect_test(@moved.fetch(path, path), line), @analyses.last.inspect_test(path, line)]

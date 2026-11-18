@@ -14,6 +14,33 @@ class ReachabilityTest < Minitest::Test
     assert_nil Sukashi::BranchDiff.between(old, index("500", predicate: "!gift"), "lib/fee.rb")
   end
 
+  def test_teardown_lifecycle_keeps_tests_in_derived_classes
+    target = { ["Fee", true, :fee] => { paths: ["lib/fee.rb"], arms: [true] } }
+    paths = Set["test/base_test.rb", "test/derived_test.rb"]
+    %w[before_teardown after_teardown].each do |hook|
+      sources = index("500").sources.merge(
+        "test/base_test.rb" => "class BaseTest; def #{hook}; Fee.fee(true); end; end",
+        "test/derived_test.rb" => "class DerivedTest < BaseTest; def test_other; Fee.fee(false); end; end"
+      )
+      reach = Sukashi::Reachability.new(Sukashi::SourceIndex.new(sources), target, paths, Set.new)
+      assert_equal :unknown, reach.inspect_test("test/derived_test.rb", 1), hook
+    end
+  end
+
+  def test_controller_hook_is_scoped_to_the_controller_and_its_descendants
+    sources = index("500").sources.merge(
+      "base.rb" => "class BaseController; before_action :charge; end",
+      "orders.rb" => "class OrdersController < BaseController; def show; Fee.fee(false); end; end",
+      "config/routes.rb" => 'Rails.application.routes.draw { get "/orders", to: "orders#show" }',
+      "test/example_test.rb" => "class ExampleTest; def test_unit; Fee.fee(false); end\n def test_http; get '/orders'; end; end"
+    )
+    target = { ["Fee", true, :fee] => { paths: ["lib/fee.rb"], arms: [true] } }
+    path = "test/example_test.rb"
+    reach = Sukashi::Reachability.new(Sukashi::SourceIndex.new(sources), target, Set[path], Set.new)
+    assert_equal :other_arm, reach.inspect_test(path, 1)
+    assert_equal :unknown, reach.inspect_test(path, 2)
+  end
+
   def test_unknown_input_and_multiple_calls
     source = index("500").sources.merge("test/fee_test.rb" => <<~RUBY)
       class FeeTest

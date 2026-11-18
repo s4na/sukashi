@@ -62,14 +62,16 @@ module Sukashi
     def initialize(index, targets, test_paths, broad_users)
       @index, @targets, @broad_users = index, targets, broad_users
       @users = index.dependents(targets.values.flat_map { |t| t[:paths] }.uniq)
-      @global_hook = !(index.hooks - test_paths).empty?
+      @global_hook = !index.unscoped_hooks.empty? || !(index.hooks - test_paths).empty?
+      @controller_users = index.dependents(index.controller_hooks.to_a)
+      @hook_users = index.dependents(index.hooks.to_a)
     end
 
     def inspect_test(path, line)
       @evidence = []
       @unknown = false
       return :file if @broad_users.include?(path)
-      return :unknown if @global_hook || @index.hooks.include?(path)
+      return :unknown if @global_hook || @hook_users.include?(path)
       nodes = @index.tests[[path, line]]
       return :unknown unless nodes.one?
       trace(nodes.first.body, {}, [])
@@ -136,6 +138,7 @@ module Sukashi
       definitions = @index.methods[key]
       return @unknown = true unless definitions.one? && !stack.include?(key)
       method = definitions.first
+      return @unknown = true if @controller_users.include?(method.path)
       if @targets.key?(key)
         arm = values.first
         return @unknown = true unless arm == true || arm == false

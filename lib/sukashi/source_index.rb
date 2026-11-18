@@ -9,7 +9,9 @@ module Sukashi
   end
 
   class SourceIndex
-    attr_reader :sources, :methods, :definitions, :tests, :routes, :dependencies, :errors, :hooks
+    MINITEST_HOOKS = %i[before_setup setup after_setup before_teardown teardown after_teardown].freeze
+
+    attr_reader :sources, :methods, :definitions, :tests, :routes, :dependencies, :errors, :hooks, :unscoped_hooks, :controller_hooks
 
     def initialize(sources)
       @sources = sources
@@ -20,8 +22,11 @@ module Sukashi
       @named_uses = Hash.new { |h, k| h[k] = Set.new }
       @references = Hash.new { |h, k| h[k] = Set.new }
       @dependencies = Hash.new { |h, k| h[k] = Set.new }
+      @local_bodies = Hash.new { |h, k| h[k] = [] }
       @tests = Hash.new { |h, k| h[k] = [] }
       @hooks = Set.new
+      @unscoped_hooks = Set.new
+      @controller_hooks = Set.new
       @errors = []
       sources.each do |path, text|
         result = Prism.parse(text, filepath: path)
@@ -50,6 +55,22 @@ module Sukashi
       end
       @reverse = Hash.new { |h, k| h[k] = [] }
       dependencies.each { |user, defs| defs.each { |d| @reverse[d] << user } }
+    end
+
+    # Compare the bytes outside local DSL bodies. A change to a top-level
+    # require, global configuration or group declaration falls back to the graph.
+    def local_spec_template(path)
+      spans = @local_bodies[path]
+      return if spans.empty? || unscoped_hooks.include?(path)
+      source = sources.fetch(path).b
+      offset = 0
+      chunks = []
+      spans.each do |span|
+        next if span.start_offset < offset
+        chunks << source.byteslice(offset...span.start_offset)
+        offset = span.end_offset
+      end
+      chunks << source.byteslice(offset..)
     end
 
     def shadowed?(key)
@@ -90,7 +111,7 @@ module Sukashi
       end
     end
 
-    def scan(node, path, owner)
+    def scan(node, path, owner, in_example_group = false)
       case node
       when Prism::ClassNode, Prism::ModuleNode
         name = self.class.constant(node.constant_path)
@@ -99,15 +120,27 @@ module Sukashi
       when Prism::DefNode
         methods[[owner, !node.receiver.nil?, node.name]] << MethodBody.new(path: path, owner: owner, node: node)
         tests[[path, node.location.start_line]] << node if node.name.to_s.start_with?("test_")
-        hooks << path if %i[setup teardown before_setup after_setup].include?(node.name)
+        hooks << path if MINITEST_HOOKS.include?(node.name)
       when Prism::CallNode
+        if %i[describe context].include?(node.name) && self.class.constant(node.receiver) == "RSpec"
+          in_example_group = true
+        elsif %i[configure shared_examples shared_examples_for shared_context].include?(node.name)
+          in_example_group = false
+        end
+        if in_example_group && !node.receiver && %i[it specify example let let! subject subject! before after around].include?(node.name) &&
+           node.block.is_a?(Prism::BlockNode) && node.block.body
+          @local_bodies[path] << node.block.body.location
+        end
         record_dsl(node, path)
         if %i[it specify example test].include?(node.name) && node.block.is_a?(Prism::BlockNode)
           tests[[path, node.location.start_line]] << node.block
         end
         if %i[before after around let let! subject subject! fixtures include_context include_examples
-              it_behaves_like setup teardown before_action after_action around_action prepend_before_action].include?(node.name)
+              it_behaves_like setup teardown].include?(node.name)
           hooks << path
+          unscoped_hooks << path unless in_example_group && !node.receiver
+        elsif %i[before_action after_action around_action prepend_before_action].include?(node.name)
+          owner ? controller_hooks << path : unscoped_hooks << path
         end
         if !node.receiver && (Routes::HTTP.include?(node.name) || node.name == :visit)
           @http_calls << [path, node.name == :visit ? :get : node.name, node.arguments&.arguments&.first]
@@ -119,7 +152,7 @@ module Sukashi
       when Prism::ConstantReadNode, Prism::ConstantPathNode
         @references[path] << node.name.to_s
       end
-      node.each_child_node { |child| scan(child, path, owner) }
+      node.each_child_node { |child| scan(child, path, owner, in_example_group) }
     end
   end
 
