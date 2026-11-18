@@ -56,6 +56,27 @@ ignore: ["docs/**/*.md"]
 
 コマンドは引数の配列で指定します。RSpecジョブにはRSpec CLIオプションを受け取るコマンドを、MinitestジョブにはMinitestを起動するコマンドを指定します。`command` は既存ジョブをそのまま全件実行し、終了ステータスを確認します。個別IDが得られないジョブは `full_only_job` に記録されます。
 
+### 全件実行に戻すパスを追加する
+
+`full_on` はリポジトリルートからの相対パスに対する glob の配列です。**既定値への追加**であり、置き換えや解除はできません。`full_on: []` でも既定値は残ります。Ruby の変更にも適用し、同じパスが `ignore` に一致しても全件実行を優先します。移動・削除では旧パスも判定します。
+
+```yaml
+full_on:
+  - "lib/shared/**/*.rb"
+  - "lib/tasks/*.rake"
+  - "templates/**/*"
+ignore:
+  - "docs/**/*.md"
+```
+
+既定値は `config/**/*`、`db/**/*`、`spec/support/**/*`、`test/support/**/*`、`app/views/**/*`、`app/assets/**/*`、`app/javascript/**/*`、`.github/**/*` と、全階層の `Gemfile`、`Gemfile.lock`、`.rspec`、`.sukashi.yml`、`spec_helper.rb`、`rails_helper.rb`、`test_helper.rb`、`*.gemspec` です。monorepo 内の `packages/sample/Gemfile` や gemspec も全件実行になります。ディレクトリ規則はルート基準なので、入れ子のアプリ設定には `packages/*/config/**/*` などを追加します。
+
+glob は Ruby の `File.fnmatch?`（`FNM_PATHNAME | FNM_DOTMATCH`）で評価します。`*` はパス区切りを越えず、`**/` は任意の深さに一致し、ドットで始まる名前も対象です。先頭の `./` や `/` を付けずに指定してください。
+
+`ignore` が効くのは **非 Ruby ファイルだけ**です。列挙されたテストファイル、既定値または `full_on` に一致するパスは無視できません。それ以外の非 Ruby 変更も `ignore` に一致しなければ全件に戻ります。たとえば `lib/tasks/*.rake` は追加しなくても通常は全件ですが、`full_on` に書けば広い `ignore` より優先できます。`.github/ISSUE_TEMPLATE` だけを省略する設定は現在はサポートしません。安全側の既定値を弱める除外規則は、この設定には設けていません。
+
+設定変更は plan の fingerprint に反映されます。この変更前に作った plan も不一致になり、既存の仕組みで全件実行に戻ります。
+
 ## 選択の範囲
 
 初版は、真偽値の仮引数を直接調べるクラスメソッドの `if ... else ... end` で、片側のリテラルなどの変更を識別します。リテラル引数を直接渡すテストや、URLを文字列リテラルで指定したRailsルート → action → クラスメソッドの経路なら反対側だけを通るテストを省けます。controllerの応答を追えるのは単純な `render plain:` までです。アプリで設定したRack middlewareがあるHTTP経路、暗黙の描画、テンプレート・layoutの描画、prepend等によるメソッドの差し替えは未解決として残します。条件の変更、移動・削除などは両版のファイル依存に広げます。動的な呼び出し・共有setupは候補に残し、parse失敗、未分類の変更、比較元の欠落などでは全件実行に戻ります。RSpecグループ内の `let` や `before` は、そのファイルと利用元を候補に残します。controllerの `before_action` は、そのcontrollerや継承先を通る経路に影響します。共通helperの `fixtures :all` や `config.before` のように帰属を限定できないフックがある場合は、全件に戻るため削減できません。全件照合で失敗を再現できることが、選択漏れを検出する条件です。

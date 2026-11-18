@@ -89,9 +89,9 @@ module Sukashi
     end
 
     def shared?(path)
-      path.start_with?("config/", "db/", "spec/support/", "test/support/", "app/views/", "app/assets/", "app/javascript/", ".github/") ||
-        %w[Gemfile Gemfile.lock .rspec .sukashi.yml spec_helper.rb rails_helper.rb test_helper.rb].include?(File.basename(path)) ||
-        path.end_with?(".gemspec")
+      @config.full_on.any? do |pattern|
+        File.fnmatch?(pattern, path, File::FNM_PATHNAME | File::FNM_DOTMATCH)
+      end
     end
 
     def select(rows)
