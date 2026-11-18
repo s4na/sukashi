@@ -63,3 +63,5 @@ ignore: ["docs/**/*.md"]
 開発時の検証は `bundle install` の後、`bundle exec ruby -Itest -e 'Dir["test/*_test.rb"].sort.each { |f| require_relative f }'` で実行します。
 
 [検証用Railsアプリとシナリオ一覧](fixtures/rails_app/README.md)
+
+[RSpec の複数プロセスジョブの条件](docs/rspec-workers.md)
