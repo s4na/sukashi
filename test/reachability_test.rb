@@ -80,6 +80,18 @@ class ReachabilityTest < Minitest::Test
     end
   end
 
+  def test_explicit_receiver_redefinition_outside_class_body
+    path = "test/fee_test.rb"
+    reopened = index("500").sources.merge(
+      "override.rb" => "def Fee.fee(gift); saved_fee(true); end",
+      path => "class T; def test_fee; Fee.fee(false); end; end"
+    )
+    idx = Sukashi::SourceIndex.new(reopened)
+    target = { ["Fee", true, :fee] => { paths: ["lib/fee.rb"], arms: [true] } }
+    assert_equal 2, idx.methods.fetch(["Fee", true, :fee]).size
+    assert_equal :unknown, Sukashi::Reachability.new(idx, target, Set[path], Set.new).inspect_test(path, 1)
+  end
+
   def test_wrapped_class_method_is_not_a_proven_branch
     ["Fee.singleton_class.prepend(Override)", "Fee.extend(Override)", "class Fee; class << self; prepend Override; end; end"].each do |wrapper|
       path = "test/fee_test.rb"

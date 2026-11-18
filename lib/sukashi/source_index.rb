@@ -50,6 +50,7 @@ module Sukashi
         route = routes&.lookup(verb, arg)
         dependencies[path].merge(definitions[route.first]) if route
       end
+      @open_dispatch_names = @open_dispatch.compact.map { |name| name.split("::").last }.to_set
       @shadowed_methods = Set.new
       methods.each_key do |owner, singleton, name|
         next unless owner
@@ -78,7 +79,7 @@ module Sukashi
 
     def dynamic_dispatch?(owner)
       @open_dispatch.include?(nil) || @open_dispatch.include?(owner) ||
-        @open_dispatch.include?(owner.to_s.split("::").last)
+        @open_dispatch_names.include?(owner.to_s.split("::").last)
     end
 
     def shadowed?(key)
@@ -138,12 +139,21 @@ module Sukashi
       case node
       when Prism::ClassNode, Prism::ModuleNode
         name = self.class.constant(node.constant_path)
-        owner = [owner, name].compact.join("::") if name
+        if name
+          owner = node.constant_path.location.slice.start_with?("::") ? name : [owner, name].compact.join("::")
+        end
         definitions[name.to_s.split("::").last] << path
       when Prism::SingletonClassNode
         @open_dispatch << dispatch_owner(node.expression, owner)
       when Prism::DefNode
-        methods[[owner, !node.receiver.nil?, node.name]] << MethodBody.new(path: path, owner: owner, node: node)
+        method_owner = owner
+        if node.receiver && !node.receiver.is_a?(Prism::SelfNode)
+          # The receiver, not this file's lexical nesting, owns the method.
+          # Retain all candidates for qualified/aliased or computed receivers.
+          method_owner = self.class.constant(node.receiver)
+          @open_dispatch << method_owner
+        end
+        methods[[method_owner, !node.receiver.nil?, node.name]] << MethodBody.new(path: path, owner: method_owner, node: node)
         tests[[path, node.location.start_line]] << node if node.name.to_s.start_with?("test_")
         hooks << path if MINITEST_HOOKS.include?(node.name)
       when Prism::CallNode
