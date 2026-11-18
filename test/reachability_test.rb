@@ -92,6 +92,29 @@ class ReachabilityTest < Minitest::Test
     assert_equal :unknown, Sukashi::Reachability.new(idx, target, Set[path], Set.new).inspect_test(path, 1)
   end
 
+  def test_lexical_receiver_can_be_a_constant_alias
+    path = "test/fee_test.rb"
+    ["module Shop; Fee = ::OtherFee; end", "Shop::Fee = OtherFee", "Shop.const_set(:Fee, OtherFee)"].each do |definition|
+      idx = Sukashi::SourceIndex.new(index("500").sources.merge(
+        "aliases.rb" => definition, path => "module Shop; class T; def test_fee; Fee.fee(false); end; end; end"
+      ))
+      target = { ["Fee", true, :fee] => { paths: ["lib/fee.rb"], arms: [true] } }
+      assert_equal :unknown, Sukashi::Reachability.new(idx, target, Set[path], Set.new).inspect_test(path, 1)
+    end
+  end
+
+  def test_group_registration_dsl_and_alternate_configuration_hooks
+    path = "spec/fee_spec.rb"
+    ["prepend_before", "append_after", "install_project_hooks"].each do |registration|
+      src = "RSpec.describe(Fee) do\n #{registration} { Fee.fee(true) }\n it('regular') { Fee.fee(false) }\nend"
+      idx = Sukashi::SourceIndex.new(index("500").sources.merge(path => src))
+      assert_includes idx.hooks, path
+      refute_includes idx.unscoped_hooks, path
+    end
+    idx = Sukashi::SourceIndex.new(path => "RSpec.configure { |c| c.prepend_before { Fee.fee(true) } }")
+    assert_includes idx.unscoped_hooks, path
+  end
+
   def test_wrapped_class_method_is_not_a_proven_branch
     ["Fee.singleton_class.prepend(Override)", "Fee.extend(Override)", "class Fee; class << self; prepend Override; end; end"].each do |wrapper|
       path = "test/fee_test.rb"

@@ -9,6 +9,9 @@ module Sukashi
   end
 
   class SourceIndex
+    GROUPS = %i[describe context].freeze
+    EXAMPLES = %i[it specify example].freeze
+    RSPEC_HOOK = /\A(?:(?:append|prepend)_)?(?:before|after|around)\z/
     ACTION_CALLBACK = /\A(?:(?:append|prepend)_)?(?:before|after|around)_action\z/
     MINITEST_HOOKS = %i[before_setup setup after_setup before_teardown teardown after_teardown].freeze
 
@@ -30,6 +33,8 @@ module Sukashi
       @controller_hooks = Set.new
       @custom_http_pipeline = false
       @open_dispatch = Set.new
+      @assigned_constants = Set.new
+      @constant_owners = Hash.new { |h, k| h[k] = Set.new }
       @errors = []
       sources.each do |path, text|
         result = Prism.parse(text, filepath: path)
@@ -78,7 +83,9 @@ module Sukashi
     end
 
     def dynamic_dispatch?(owner)
-      @open_dispatch.include?(nil) || @open_dispatch.include?(owner) ||
+      parts = owner.to_s.split("::")
+      @assigned_constants.include?(nil) || parts.any? { |part| @assigned_constants.include?(part) || @constant_owners[part].size > 1 } ||
+        @open_dispatch.include?(nil) || @open_dispatch.include?(owner) ||
         @open_dispatch_names.include?(owner.to_s.split("::").last)
     end
 
@@ -142,7 +149,15 @@ module Sukashi
         if name
           owner = node.constant_path.location.slice.start_with?("::") ? name : [owner, name].compact.join("::")
         end
-        definitions[name.to_s.split("::").last] << path
+        short_name = name.to_s.split("::").last
+        @constant_owners[short_name] << owner
+        definitions[short_name] << path
+      when Prism::ConstantWriteNode, Prism::ConstantOrWriteNode, Prism::ConstantAndWriteNode,
+           Prism::ConstantOperatorWriteNode, Prism::ConstantTargetNode, Prism::ConstantPathTargetNode
+        @assigned_constants << node.name.to_s
+      when Prism::ConstantPathWriteNode, Prism::ConstantPathOrWriteNode,
+           Prism::ConstantPathAndWriteNode, Prism::ConstantPathOperatorWriteNode
+        @assigned_constants << node.target.name.to_s
       when Prism::SingletonClassNode
         @open_dispatch << dispatch_owner(node.expression, owner)
       when Prism::DefNode
@@ -157,14 +172,26 @@ module Sukashi
         tests[[path, node.location.start_line]] << node if node.name.to_s.start_with?("test_")
         hooks << path if MINITEST_HOOKS.include?(node.name)
       when Prism::CallNode
-        if %i[describe context].include?(node.name) && self.class.constant(node.receiver) == "RSpec"
+        if GROUPS.include?(node.name) && (self.class.constant(node.receiver) == "RSpec" || (in_example_group && !node.receiver))
           in_example_group = true
+          # Unknown DSL at group definition time may install arbitrary hooks.
+          # Inspect group statements, not the calls made inside an example.
+          body = node.block.body if node.block.is_a?(Prism::BlockNode)
+          if body && (!body.is_a?(Prism::StatementsNode) || body.body.any? { |n|
+            !n.is_a?(Prism::CallNode) || n.receiver || !(EXAMPLES.include?(n.name) || GROUPS.include?(n.name))
+          })
+            hooks << path
+          end
         elsif %i[configure shared_examples shared_examples_for shared_context].include?(node.name)
           in_example_group = false
         end
         if in_example_group && !node.receiver && %i[it specify example let let! subject subject! before after around].include?(node.name) &&
            node.block.is_a?(Prism::BlockNode) && node.block.body
           @local_bodies[path] << node.block.body.location
+        end
+        if %i[const_set remove_const autoload].include?(node.name)
+          arg = node.arguments&.arguments&.first
+          @assigned_constants << ([Prism::StringNode, Prism::SymbolNode].include?(arg.class) ? arg.unescaped : nil)
         end
         if %i[prepend extend define_singleton_method define_method alias_method class_eval class_exec module_eval].include?(node.name)
           @open_dispatch << dispatch_owner(node.receiver, owner)
@@ -178,7 +205,7 @@ module Sukashi
         if %i[it specify example test].include?(node.name) && node.block.is_a?(Prism::BlockNode)
           tests[[path, node.location.start_line]] << node.block
         end
-        if %i[before after around let let! subject subject! fixtures include_context include_examples
+        if RSPEC_HOOK.match?(node.name) || %i[let let! subject subject! fixtures include_context include_examples
               it_behaves_like setup teardown].include?(node.name)
           hooks << path
           unscoped_hooks << path unless in_example_group && !node.receiver
