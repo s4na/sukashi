@@ -7,6 +7,16 @@ require "tmpdir"
 # Exercise the installed command boundary, real Rails routing, RSpec and Minitest.
 class SelectionTest < Minitest::Test
   CLI = File.expand_path("../exe/sukashi", __dir__)
+  DUMMY_APP = File.expand_path("../fixtures/rails_app", __dir__)
+
+  REGULAR_REQUEST = "./spec/requests/orders_spec.rb[1:1]"
+  GIFT_REQUEST = "./spec/requests/orders_spec.rb[1:2]"
+  RECEIPT_REQUEST = "./spec/requests/receipt_spec.rb[1:1]"
+  GIFT_SYSTEM = "./spec/system/order_spec.rb[1:1]"
+  GIFT_UNIT = "GiftTest#test_fee"
+  REGULAR_UNIT = "RegularTest#test_fee"
+  RACK_REQUEST = "RegularOrderTest#test_regular_response"
+  RECEIPT_SYSTEM = "ReceiptTest#test_receipt_flow"
 
   def write(path, text)
     FileUtils.mkdir_p(File.dirname(File.join(@root, path)))
@@ -27,86 +37,10 @@ class SelectionTest < Minitest::Test
 
   def setup
     @root = Dir.mktmpdir
+    (Dir.children(DUMMY_APP) - %w[log tmp]).each { |entry| FileUtils.cp_r(File.join(DUMMY_APP, entry), @root) }
     cmd("git", "init", "-q")
     cmd("git", "config", "user.name", "Test")
     cmd("git", "config", "user.email", "test@example.invalid")
-    write("app/models/order_fee.rb", <<~RUBY)
-      class OrderFee
-        def self.fee(gift)
-          if gift
-            500
-          else
-            100
-          end
-        end
-      end
-    RUBY
-    write("config/routes.rb", <<~RUBY)
-      Rails.application.routes.draw do
-        get "/gift", to: "orders#gift"
-        get "/regular", to: "orders#regular"
-      end
-    RUBY
-    write("app/controllers/orders_controller.rb", <<~RUBY)
-      class OrdersController < ActionController::Base
-        def gift
-          render plain: OrderFee.fee(true)
-        end
-        def regular
-          render plain: OrderFee.fee(false)
-        end
-      end
-    RUBY
-    write("config/environment.rb", <<~RUBY)
-      ENV["RAILS_ENV"] = "test"
-      require "rails"
-      require "action_controller/railtie"
-      class ExampleApp < Rails::Application
-        config.root = File.expand_path("..", __dir__)
-        config.eager_load = false
-        config.secret_key_base = "a" * 64
-        config.hosts.clear
-        config.logger = Logger.new(File::NULL)
-      end
-      Rails.application.initialize!
-    RUBY
-    write("spec/rails_helper.rb", <<~RUBY)
-      require_relative "../config/environment"
-      require "rspec/rails"
-      require "capybara/rspec"
-      RSpec.configure { |config| config.include Rails.application.routes.url_helpers }
-    RUBY
-    write("spec/requests/orders_spec.rb", <<~RUBY)
-      require_relative "../rails_helper"
-      RSpec.describe "orders", type: :request do
-        it("regular") { get "/regular"; expect(response.body).to eq("100") }
-        it("gift") { get "/gift"; expect(response.body).to eq("500") }
-      end
-    RUBY
-    write("spec/system/order_spec.rb", <<~RUBY)
-      require_relative "../rails_helper"
-      RSpec.describe "ordering", type: :system do
-        it "shows the gift fee" do
-          driven_by :rack_test
-          visit "/gift"
-          expect(page).to have_text("500")
-        end
-      end
-    RUBY
-    write("test/fee_test.rb", <<~RUBY)
-      require "minitest/autorun"
-      require_relative "../app/models/order_fee"
-      class GiftTest < Minitest::Test
-        def test_fee
-          assert_equal 500, OrderFee.fee(true)
-        end
-      end
-      class RegularTest < Minitest::Test
-        def test_fee
-          assert_equal 100, OrderFee.fee(false)
-        end
-      end
-    RUBY
     commit("base")
     @base = cmd("git", "rev-parse", "HEAD")
   end
@@ -120,32 +54,154 @@ class SelectionTest < Minitest::Test
     cmd("git", "commit", "-qm", message)
   end
 
+  def replace(path, from, to)
+    text = File.read(File.join(@root, path))
+    assert_includes text, from, "mutation missing in #{path}"
+    write(path, text.sub(from, to))
+  end
+
   def change_fee(from, to)
-    path = "app/models/order_fee.rb"
-    write(path, File.read(File.join(@root, path)).sub(from, to))
+    replace("app/models/order_fee.rb", from, to)
     commit("fee change")
+  end
+
+  def assert_subset(job, selected:, failures:)
+    assert_equal "subset", job.fetch("mode")
+    assert_equal selected.sort, job.fetch("selected_ids")
+    assert_equal selected.sort, job.fetch("executed_ids")
+    assert_equal failures.sort, job.fetch("selected_failures")
+    assert_equal failures.sort, job.fetch("full_failures")
+    assert_empty job.fetch("full_only_failures")
+    refute job.fetch("inventory_drift")
+    assert_equal 4, job.fetch("full_count")
+  end
+
+  def test_unmodified_app_passes_all_eight_tests
+    report = cli("check", "--base", @base)
+    assert_equal %w[minitest rspec], report.fetch("jobs").keys.sort
+    report.fetch("jobs").each_value do |job|
+      assert_equal "skip", job.fetch("mode")
+      assert_equal 4, job.fetch("full_count")
+      assert_empty job.fetch("full_failures")
+    end
   end
 
   def test_branch_selection_and_comparison
     change_fee("500", "700")
     plan = cli("plan", "--base", @base)
-    jobs = plan.fetch("jobs")
-    assert_equal ["GiftTest#test_fee"], jobs.fetch("minitest").fetch("selected").keys
-    ids = ["./spec/requests/orders_spec.rb[1:2]", "./spec/system/order_spec.rb[1:1]"]
-    assert_equal ids, jobs.fetch("rspec").fetch("selected").keys
     write("plan.json", plan.to_json)
     report = cli("run", "--plan", "plan.json", code: 1)
-    report.fetch("jobs").each_value do |job|
-      refute job.fetch("inventory_drift")
-      assert_equal job.fetch("selected_ids"), job.fetch("executed_ids")
-      assert_equal job.fetch("selected_failures"), job.fetch("full_failures")
-      refute_empty job.fetch("full_failures")
-      assert_empty job.fetch("full_only_failures")
-    end
-    jobs.fetch("rspec").fetch("selected").delete(ids.last)
+    gift_specs = [GIFT_REQUEST, RECEIPT_REQUEST, GIFT_SYSTEM]
+    assert_subset(report.dig("jobs", "rspec"), selected: gift_specs, failures: gift_specs)
+    assert_subset(report.dig("jobs", "minitest"), selected: [GIFT_UNIT, RACK_REQUEST, RECEIPT_SYSTEM],
+                  failures: [GIFT_UNIT, RECEIPT_SYSTEM])
+
+    plan.fetch("jobs").fetch("rspec").fetch("selected").delete(GIFT_SYSTEM)
+    plan.fetch("jobs").fetch("minitest").fetch("selected").delete(RECEIPT_SYSTEM)
     write("plan.json", plan.to_json)
     missed = cli("run", "--plan", "plan.json", code: 1)
-    assert_equal [ids.last], missed.dig("jobs", "rspec", "full_only_failures")
+    assert_equal [GIFT_SYSTEM], missed.dig("jobs", "rspec", "full_only_failures")
+    assert_equal [RECEIPT_SYSTEM], missed.dig("jobs", "minitest", "full_only_failures")
+  end
+
+  def test_else_arm_changes_the_regular_fee
+    change_fee("100", "200")
+    report = cli("check", "--base", @base, code: 1)
+    assert_subset(report.dig("jobs", "rspec"), selected: [REGULAR_REQUEST, RECEIPT_REQUEST, GIFT_SYSTEM],
+                  failures: [REGULAR_REQUEST])
+    regular_tests = [REGULAR_UNIT, RACK_REQUEST, RECEIPT_SYSTEM]
+    assert_subset(report.dig("jobs", "minitest"), selected: regular_tests, failures: regular_tests)
+  end
+
+  def test_request_parameter_keeps_both_possible_paths
+    replace("config/routes.rb", "routes.draw do", "routes.draw do\n  post '/quote', to: 'orders#quote'")
+    replace("app/controllers/orders_controller.rb", "class OrdersController < ActionController::Base", <<~'RUBY'.rstrip)
+      class OrdersController < ActionController::Base
+        def quote
+          render plain: OrderFee.fee(params[:gift] == "yes")
+        end
+    RUBY
+    path = "spec/requests/quote_spec.rb"
+    write(path, <<~RUBY)
+      require_relative "../rails_helper"
+      RSpec.describe "quotes", type: :request do
+        it "quotes a gift" do
+          post "/quote", params: { gift: "yes" }
+          expect(response.body).to eq("500")
+        end
+        it "quotes a regular order" do
+          post "/quote", params: { gift: "no" }
+          expect(response.body).to eq("100")
+        end
+      end
+    RUBY
+    commit("add parameter-dependent route")
+    base = cmd("git", "rev-parse", "HEAD")
+    assert cli("check", "--base", base).fetch("ok")
+    change_fee("500", "700")
+    specs = cli("check", "--base", base, code: 1).dig("jobs", "rspec")
+    gift_quote = "./#{path}[1:1]"
+    regular_quote = "./#{path}[1:2]"
+    assert_equal [gift_quote, regular_quote, GIFT_REQUEST, GIFT_SYSTEM, RECEIPT_REQUEST].sort, specs.fetch("executed_ids")
+    failures = [gift_quote, GIFT_REQUEST, GIFT_SYSTEM, RECEIPT_REQUEST].sort
+    assert_equal failures, specs.fetch("selected_failures")
+    assert_equal failures, specs.fetch("full_failures")
+    assert_empty specs.fetch("full_only_failures")
+  end
+
+  def test_partial_change_reaches_request_and_browser
+    replace("app/views/orders/_gift_fee.html.erb", "Gift fee:", "Fee:")
+    commit("change receipt text")
+    report = cli("check", "--base", @base, code: 1)
+    assert_equal [RECEIPT_REQUEST], report.dig("jobs", "rspec", "full_failures")
+    assert_equal [RECEIPT_SYSTEM], report.dig("jobs", "minitest", "full_failures")
+    assert report.fetch("jobs").values.all? { |job| job["mode"] == "full" && job["full_count"] == 4 }
+  end
+
+  # The regular action itself only calls fee(false). Both overlays cause a
+  # real second call to fee(true) before that action gets to answer.
+  def assert_gift_change_reaches_regular_request
+    commit("install request hook")
+    base = cmd("git", "rev-parse", "HEAD")
+    assert cli("check", "--base", base).fetch("ok")
+    change_fee("500", "700")
+    report = cli("check", "--base", base, code: 1)
+    specs = report.dig("jobs", "rspec")
+    assert_equal "full", specs.fetch("mode")
+    assert_equal [REGULAR_REQUEST, GIFT_REQUEST, RECEIPT_REQUEST, GIFT_SYSTEM].sort, specs.fetch("full_failures")
+    tests = [GIFT_UNIT, RACK_REQUEST, RECEIPT_SYSTEM]
+    assert_subset(report.dig("jobs", "minitest"), selected: tests, failures: tests)
+  end
+
+  def test_callback_invokes_the_other_arm
+    replace("app/controllers/orders_controller.rb", "class OrdersController < ActionController::Base", <<~'RUBY'.rstrip)
+      class OrdersController < ActionController::Base
+        before_action :check_gift_fee, only: :regular
+
+        def check_gift_fee
+          head :conflict if OrderFee.fee(true) != 500
+        end
+    RUBY
+    assert_gift_change_reaches_regular_request
+  end
+
+  def test_middleware_invokes_the_other_arm
+    write("config/initializers/fee_middleware.rb", <<~RUBY)
+      class FeeMiddleware
+        def initialize(app)
+          @app = app
+        end
+
+        def call(env)
+          if env["PATH_INFO"] == "/regular" && OrderFee.fee(true) != 500
+            return [409, { "content-type" => "text/plain" }, ["Fee mismatch"]]
+          end
+          @app.call(env)
+        end
+      end
+      Rails.application.config.middleware.use FeeMiddleware
+    RUBY
+    assert_gift_change_reaches_regular_request
   end
 
   def test_custom_job_preserves_directory_and_selects_individual_examples
@@ -160,9 +216,40 @@ class SelectionTest < Minitest::Test
     change_fee("500", "700")
     report = cli("check", "--base", base, code: 1)
     request = report.fetch("jobs").fetch("requests")
-    assert_equal ["./spec/requests/orders_spec.rb[1:2]"], request.fetch("executed_ids")
-    assert_equal 2, request.fetch("full_count")
+    assert_equal [GIFT_REQUEST, RECEIPT_REQUEST], request.fetch("executed_ids")
+    assert_equal 3, request.fetch("full_count")
     refute request.fetch("inventory_drift")
+  end
+
+  def test_plain_minitest_job_passes_on_equivalent_literal_edit
+    write(".sukashi.yml", <<~YAML)
+      jobs:
+        unit:
+          runner: minitest
+          command: [ruby, test/fee_test.rb]
+    YAML
+    commit("unit-only job")
+    base = cmd("git", "rev-parse", "HEAD")
+    change_fee("500", "5_00")
+    report = cli("check", "--base", base)
+    job = report.fetch("jobs").fetch("unit")
+    assert_equal [GIFT_UNIT], job.fetch("executed_ids")
+    assert_equal 2, job.fetch("full_count")
+    assert_empty job.fetch("full_failures")
+    refute job.fetch("inventory_drift")
+  end
+
+  def test_route_edit_takes_precedence_over_a_narrow_branch_edit
+    replace("config/routes.rb", '"/regular", to: "orders#regular"', '"/regular", to: "orders#gift"')
+    change_fee("500", "700")
+    report = cli("check", "--base", @base, code: 1)
+    report.fetch("jobs").each_value do |job|
+      assert_equal "full", job.fetch("mode")
+      assert_equal 4, job.fetch("full_count")
+      assert_includes job.fetch("reason"), "config/routes.rb"
+    end
+    assert_includes report.dig("jobs", "rspec", "full_failures"), REGULAR_REQUEST
+    assert_includes report.dig("jobs", "minitest", "full_failures"), RACK_REQUEST
   end
 
   def test_full_command_runs_on_stale_plan_and_missing_history
@@ -193,7 +280,7 @@ class SelectionTest < Minitest::Test
     commit("move and add tests")
     report = cli("check", "--base", @base)
     assert report.fetch("ok")
-    assert_equal 3, report.dig("jobs", "minitest", "full_count")
+    assert_equal 5, report.dig("jobs", "minitest", "full_count")
   end
 
   def test_edit_to_group_local_let_selects_only_that_spec_file
@@ -229,13 +316,14 @@ class SelectionTest < Minitest::Test
     base = cmd("git", "rev-parse", "HEAD")
     change_fee("500", "700")
     decision = cli("plan", "--base", base).dig("jobs", "minitest")
-    assert_equal ["GiftTest#test_fee", "WrappedTest#test_regular"], decision.fetch("selected").keys
+    assert_equal [GIFT_UNIT, RECEIPT_SYSTEM, RACK_REQUEST, "WrappedTest#test_regular"].sort, decision.fetch("selected").keys
   end
 
   def test_predicate_change_runs_all_tests
     change_fee("if gift", "unless gift")
     report = cli("check", "--base", @base, code: 1)
-    assert_equal [3, 2], report.fetch("jobs").values_at("rspec", "minitest").map { |j| j["full_count"] }
+    assert_equal [REGULAR_REQUEST, GIFT_REQUEST, RECEIPT_REQUEST, GIFT_SYSTEM].sort, report.dig("jobs", "rspec", "full_failures")
+    assert_equal [GIFT_UNIT, REGULAR_UNIT, RACK_REQUEST, RECEIPT_SYSTEM].sort, report.dig("jobs", "minitest", "full_failures")
     assert report.fetch("jobs").values.all? { |job| job["mode"] == "full" }
   end
 end
