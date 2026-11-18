@@ -87,7 +87,7 @@ module Sukashi
       return unless node
       case node
       when Prism::StatementsNode, Prism::ArgumentsNode, Prism::KeywordHashNode, Prism::AssocNode
-        node.each_child_node { |n| trace(n, bindings, stack) }
+        node.compact_child_nodes.each { |n| trace(n, bindings, stack) }
       when Prism::CallNode
         trace_call(node, bindings, stack)
       when Prism::IntegerNode, Prism::FloatNode, Prism::TrueNode, Prism::FalseNode, Prism::NilNode,
