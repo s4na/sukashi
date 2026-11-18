@@ -1,4 +1,5 @@
 require_relative "source_index"
+require_relative "test_helpers"
 
 module Sukashi
   # Mask literals inside eligible arms, then compare the *entire* blob. An edit
@@ -56,7 +57,6 @@ module Sukashi
   # Only discard a test if every modeled call path is known. Unknown calls,
   # callbacks, dynamic URL construction and multiple possible definitions keep it.
   class Reachability
-    ASSERTIONS = %i[expect to not_to to_not eq eql be assert_equal assert_nil assert refute refute_equal].freeze
     attr_reader :evidence
 
     def initialize(index, targets, test_paths, broad_users)
@@ -126,7 +126,7 @@ module Sukashi
          node.receiver.name == :response && !node.receiver.receiver && !node.receiver.arguments
         return
       end
-      if ASSERTIONS.include?(node.name) || plain_render?(node)
+      if TestHelpers::ASSERTIONS.include?(node.name) || plain_render?(node)
         trace(node.receiver, bindings, stack)
         args.each { |a| trace(a, bindings, stack) }
       else

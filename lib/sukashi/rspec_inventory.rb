@@ -1,5 +1,5 @@
 require "rspec/core/formatters/json_formatter"
-require_relative "request_helpers"
+require_relative "test_helpers"
 
 module Sukashi
   class RSpecInventory < RSpec::Core::Formatters::JsonFormatter
@@ -11,7 +11,7 @@ module Sukashi
       @wrapped_groups ||= {}
       group = example.example_group
       unless @wrapped_groups.key?(group)
-        @wrapped_groups[group] = RequestHelpers.overridden?(group)
+        @wrapped_groups[group] = TestHelpers.overridden?(group)
       end
       super.merge(custom_protocol: @wrapped_groups[group])
     end

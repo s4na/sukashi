@@ -368,6 +368,27 @@ class SelectionTest < Minitest::Test
     assert_empty job.fetch("full_only_failures")
   end
 
+  def test_included_matcher_can_reach_the_other_arm
+    File.open(File.join(@root, "spec/rails_helper.rb"), "a") do |helper|
+      helper.puts <<~RUBY
+        module BillingMatchers
+          def eq(value)
+            raise "unexpected gift charge" unless OrderFee.fee(true) == 500
+            super
+          end
+        end
+        RSpec.configure { |config| config.include BillingMatchers, type: :request }
+      RUBY
+    end
+    commit("wrap eq matcher")
+    base = cmd("git", "rev-parse", "HEAD")
+    assert cli("check", "--base", base).fetch("ok")
+    change_fee("500", "700")
+    job = cli("check", "--base", base, code: 1).dig("jobs", "rspec")
+    assert_includes job.fetch("full_failures"), REGULAR_REQUEST
+    assert_empty job.fetch("full_only_failures")
+  end
+
   def test_predicate_change_runs_all_tests
     change_fee("if gift", "unless gift")
     report = cli("check", "--base", @base, code: 1)

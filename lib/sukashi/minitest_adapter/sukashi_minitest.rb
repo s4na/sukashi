@@ -1,7 +1,7 @@
 # Loaded by Minitest only in instrumented child processes.
 require "json"
 require "minitest"
-require_relative "../request_helpers"
+require_relative "../test_helpers"
 
 module SukashiMinitest
   def self.write(rows)
@@ -14,7 +14,7 @@ module SukashiMinitest
   # protocol also catches inherited/prepended overrides and custom assertions.
   def self.custom_protocol?(suite)
     return true unless suite <= Minitest::Test
-    return true if Sukashi::RequestHelpers.overridden?(suite)
+    return true if Sukashi::TestHelpers.overridden?(suite)
     base = Minitest::Test
     @protocol ||= (base.instance_methods | base.private_instance_methods).to_h { |name| [name, base.instance_method(name)] }
     if @patched_base.nil?
