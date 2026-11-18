@@ -9,6 +9,7 @@ module Sukashi
   end
 
   class SourceIndex
+    ACTION_CALLBACK = /\A(?:(?:append|prepend)_)?(?:before|after|around)_action\z/
     MINITEST_HOOKS = %i[before_setup setup after_setup before_teardown teardown after_teardown].freeze
 
     attr_reader :sources, :methods, :definitions, :tests, :routes, :dependencies, :errors, :hooks, :unscoped_hooks, :controller_hooks
@@ -139,7 +140,7 @@ module Sukashi
               it_behaves_like setup teardown].include?(node.name)
           hooks << path
           unscoped_hooks << path unless in_example_group && !node.receiver
-        elsif %i[before_action after_action around_action prepend_before_action].include?(node.name)
+        elsif ACTION_CALLBACK.match?(node.name) || node.name == :set_callback
           owner ? controller_hooks << path : unscoped_hooks << path
         end
         if !node.receiver && (Routes::HTTP.include?(node.name) || node.name == :visit)

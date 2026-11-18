@@ -29,16 +29,21 @@ class ReachabilityTest < Minitest::Test
 
   def test_controller_hook_is_scoped_to_the_controller_and_its_descendants
     sources = index("500").sources.merge(
-      "base.rb" => "class BaseController; before_action :charge; end",
       "orders.rb" => "class OrdersController < BaseController; def show; Fee.fee(false); end; end",
       "config/routes.rb" => 'Rails.application.routes.draw { get "/orders", to: "orders#show" }',
       "test/example_test.rb" => "class ExampleTest; def test_unit; Fee.fee(false); end\n def test_http; get '/orders'; end; end"
     )
     target = { ["Fee", true, :fee] => { paths: ["lib/fee.rb"], arms: [true] } }
     path = "test/example_test.rb"
-    reach = Sukashi::Reachability.new(Sukashi::SourceIndex.new(sources), target, Set[path], Set.new)
-    assert_equal :other_arm, reach.inspect_test(path, 1)
-    assert_equal :unknown, reach.inspect_test(path, 2)
+    prefixes = ["", "prepend_", "append_"]
+    registrations = prefixes.product(%w[before_action around_action after_action]).map { |prefix, name| "#{prefix}#{name} :charge" }
+    registrations << "set_callback :process_action, :after, :charge"
+    registrations.each do |registration|
+      sources["base.rb"] = "class BaseController; #{registration}; end"
+      reach = Sukashi::Reachability.new(Sukashi::SourceIndex.new(sources), target, Set[path], Set.new)
+      assert_equal :other_arm, reach.inspect_test(path, 1), registration
+      assert_equal :unknown, reach.inspect_test(path, 2), registration
+    end
   end
 
   def test_unknown_input_and_multiple_calls
