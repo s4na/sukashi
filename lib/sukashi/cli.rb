@@ -1,4 +1,5 @@
 require "optparse"
+require_relative "version"
 require_relative "repository"
 require_relative "configuration"
 require_relative "comparison"
@@ -7,9 +8,13 @@ module Sukashi
   module CLI
     def self.call(argv)
       command = argv.shift
+      if command == "--version" && argv.empty?
+        puts "sukashi #{VERSION} (#{SOURCE_REVISION})"
+        return 0
+      end
       options = { head: "HEAD", seed: 1, config: File.file?(".sukashi.yml") ? ".sukashi.yml" : nil }
       parser = OptionParser.new do |o|
-        o.banner = "Usage: sukashi plan --base REF [--head REF] | run --plan FILE | check --base REF"
+        o.banner = "Usage: sukashi plan --base REF [--head REF] | run --plan FILE | check --base REF | --version"
         o.on("--base REF") { |v| options[:base] = v }
         o.on("--head REF") { |v| options[:head] = v }
         o.on("--seed N", Integer) { |v| options[:seed] = v }

@@ -2,9 +2,24 @@
 
 PrismでPRの変更分岐からRSpecのexampleとMinitestのテストメソッドを選び、同じコミット・seedで全件実行と照合するRuby CLIです。Railsのrequest spec、system spec、通常のRubyの単体テストを含め、設定した全ジョブが対象です。[選択アルゴリズムの設計](docs/test-selection.md)
 
+## インストール
+
+利用するプロジェクトのGemfileに追加します。
+
+```ruby
+gem "sukashi", github: "s4na/sukashi"
+```
+
+```sh
+bundle install
+bundle exec sukashi --version
+```
+
+`main`へのpushでテストが通ると、GitHub ActionsがパッチバージョンとテストしたコミットのSHAを `RELEASE` に記録します。`--version`で両方を確認できます。パッチ番号にはこのワークフローの実行番号を使います。複数のpushが重なった場合は最新のコミットを記録するので番号が飛ぶことがあります。利用側の `Gemfile.lock` はこの記録を含むコミットを固定します。新しい版を取り込むには `bundle update sukashi` を実行します。
+
 ## PRで使う
 
-利用するプロジェクトのGemfileに `gem "sukashi", git: "https://github.com/s4na/sukashi.git"` を追加し、`bundle install` を実行します。この開発ブランチを試すときはGemfileの `ref:` にPRのコミットSHAを指定できます。Git履歴を取得したリポジトリのルートで、テスト用のDBやブラウザを通常のCIと同じように用意して実行します。
+Git履歴を取得したリポジトリのルートで、テスト用のDBやブラウザを通常のCIと同じように用意して実行します。
 
 ```sh
 bundle exec sukashi check --base origin/main --head HEAD --seed 1234 > comparison.json
