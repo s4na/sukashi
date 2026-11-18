@@ -29,13 +29,8 @@ jobs:
             exit 0
           fi
 
-          read -r previous _ < RELEASE
-          version="${previous%.*}.$GITHUB_RUN_NUMBER"
-          printf '%s %s\n' "$version" "$GITHUB_SHA" > RELEASE
-          bundle lock --local
-          bundle check
-          gem build sukashi.gemspec --output "$RUNNER_TEMP/sukashi.gem"
-
+          bash .github/scripts/stamp-gem "$GITHUB_RUN_NUMBER" "$GITHUB_SHA"
+          read -r version _ < RELEASE
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add RELEASE Gemfile.lock

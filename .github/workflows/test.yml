@@ -14,3 +14,18 @@ jobs:
           ruby-version: '4.0'
           bundler-cache: true
       - run: bundle exec ruby -Itest -e 'Dir["test/*_test.rb"].sort.each { |file| require_relative file }'
+      - name: Verify the stamped gem
+        shell: bash
+        run: |
+          read -r previous _ < RELEASE
+          patch=$((${previous##*.} + 1))
+          version="${previous%.*}.$patch"
+          revision=$(git rev-parse HEAD)
+          bash .github/scripts/stamp-gem "$patch" "$revision"
+          test "$(bundle exec sukashi --version)" = "sukashi $version ($revision)"
+          ruby -rrubygems/package -e '
+            spec = Gem::Package.new(ARGV.fetch(0)).spec
+            abort "packaged version mismatch" unless spec.version.to_s == ARGV.fetch(1)
+            abort "packaged revision mismatch" unless spec.metadata.fetch("source_revision") == ARGV.fetch(2)
+            abort "missing release metadata" unless spec.files.include?("RELEASE")
+          ' "$RUNNER_TEMP/sukashi.gem" "$version" "$revision"
