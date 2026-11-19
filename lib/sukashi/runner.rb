@@ -3,7 +3,7 @@ require "tmpdir"
 require "pathname"
 
 module Sukashi
-  Result = Struct.new(:ok, :rows, :seconds, keyword_init: true) do
+  Result = Struct.new(:ok, :rows, :seconds, :runtime_identity, keyword_init: true) do
     def ids
       rows&.map { |r| r.fetch("id") }&.sort
     end
@@ -25,7 +25,8 @@ module Sukashi
       return Result.new(ok: false) if discover && @job["runner"] == "command"
       Dir.mktmpdir("sukashi-run") do |dir|
         command = @job.fetch("command").dup
-        env = { "SEED" => @seed.to_s, "SUKASHI_SELECT" => nil }
+        env = { "SEED" => @seed.to_s, "SUKASHI_SELECT" => nil,
+                "SUKASHI_RUNTIME_DIR" => discover ? dir : nil }
         if ids
           selection_path = File.join(dir, "selection")
           File.write(selection_path, ids.to_json)
@@ -37,7 +38,8 @@ module Sukashi
           command.concat(["--require", File.expand_path("rspec_report.rb", __dir__)])
           formatter = "Sukashi::RSpecReport"
           if discover
-            command.concat(["--require", File.expand_path("rspec_inventory.rb", __dir__)])
+            command.concat(["--require", File.expand_path("runtime_identity.rb", __dir__),
+                            "--require", File.expand_path("rspec_inventory.rb", __dir__)])
             formatter = "Sukashi::RSpecInventory"
           end
           command.concat(["--seed", @seed.to_s, "--format", formatter])
@@ -52,7 +54,7 @@ module Sukashi
         ok = system(env, [command.first, command.first], *command.drop(1), out: :err)
         rows = read_reports(dir) unless plain
         ok &&= !rows.any? { |row| row["status"] == "failed" } if rows && @job["runner"] == "rspec"
-        Result.new(ok: !!ok, rows: rows, seconds: (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(3))
+        Result.new(ok: !!ok, rows: rows, runtime_identity: discover ? read_runtime_identity(dir) : nil, seconds: (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(3))
       end
     rescue InvalidReport => e
       warn e.message
@@ -63,6 +65,19 @@ module Sukashi
     end
 
     private
+
+    def read_runtime_identity(dir)
+      files = Dir[File.join(dir, "*.identity")]
+      return if files.empty?
+      identities = files.map { |file| JSON.parse(File.read(file)) }
+      return unless identities.all? { |entry| entry.is_a?(Hash) }
+      return identities.find { |entry| entry["status"] != "verified" } if identities.any? { |entry| entry["status"] != "verified" }
+      fingerprints = identities.map { |entry| entry["fingerprint"] }
+      return unless fingerprints.all? { |value| value.is_a?(String) && value.match?(/\A[0-9a-f]{64}\z/) }
+      { "status" => "verified", "fingerprints" => fingerprints.uniq.sort }
+    rescue JSON::ParserError, TypeError, SystemCallError
+      nil
+    end
 
     def read_reports(dir)
       return read_rspec_reports(dir) if @job["runner"] == "rspec"
