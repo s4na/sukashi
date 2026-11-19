@@ -1,5 +1,4 @@
 require "prism"
-require "set"
 
 module Sukashi
   MethodBody = Struct.new(:path, :owner, :node, keyword_init: true) do
@@ -235,7 +234,7 @@ module Sukashi
       when Prism::ConstantReadNode, Prism::ConstantPathNode
         @references[path] << node.name.to_s
       end
-      node.each_child_node { |child| scan(child, path, owner, in_example_group) }
+      node.compact_child_nodes.each { |child| scan(child, path, owner, in_example_group) }
     end
   end
 
@@ -270,7 +269,7 @@ module Sukashi
       elsif HTTP.include?(node.name) && args.size == 2 && args.first.is_a?(Prism::StringNode) && args.last.is_a?(Prism::KeywordHashNode)
         options = {}
         args.last.elements.each do |assoc|
-          return unless assoc.is_a?(Prism::AssocNode) && assoc.key.is_a?(Prism::SymbolNode) &&
+          return nil unless assoc.is_a?(Prism::AssocNode) && assoc.key.is_a?(Prism::SymbolNode) &&
             %w[to as].include?(assoc.key.unescaped) && [Prism::StringNode, Prism::SymbolNode].include?(assoc.value.class)
           options[assoc.key.unescaped] = assoc.value.unescaped
         end

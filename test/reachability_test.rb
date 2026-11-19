@@ -182,7 +182,7 @@ class ReachabilityTest < Minitest::Test
     target = { ["Fee", true, :fee] => { paths: ["lib/fee.rb"], arms: [true] } }
     paths = Set["test/fee_test.rb"]
     reach = Sukashi::Reachability.new(idx, target, paths, Set.new)
-    assert_equal [:affected, :unknown, :other_arm], (2..4).map { |line| reach.inspect_test(paths.first, line) }
+    assert_equal [:affected, :unknown, :other_arm], ((2..4).map { |line| reach.inspect_test(paths.first, line) })
     source["test/support.rb"] = "class Base; def setup; Fee.fee(true); end; end"
     reach = Sukashi::Reachability.new(Sukashi::SourceIndex.new(source), target, paths, Set.new)
     assert_equal :unknown, reach.inspect_test(paths.first, 4)

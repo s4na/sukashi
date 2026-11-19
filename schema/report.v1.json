@@ -202,6 +202,91 @@
             ],
             "minimum": 0
           },
+          "selected_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "passed",
+                  "failed",
+                  "failed_to_start",
+                  "unavailable"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "full_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "passed",
+                  "failed",
+                  "failed_to_start",
+                  "unavailable"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selected_only_failures": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "missed_failures": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "flaky_or_order_dependent": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "unclassified_full_only_failures": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "retry_ids": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "uniqueItems": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "retry_seconds": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "retry_ok": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
           "ok": {
             "type": "boolean"
           }
@@ -211,6 +296,12 @@
     },
     "ok": {
       "type": "boolean"
+    },
+    "failure_policy": {
+      "enum": [
+        "strict",
+        "missed"
+      ]
     }
   },
   "additionalProperties": true

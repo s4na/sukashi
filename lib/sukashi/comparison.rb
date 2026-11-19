@@ -1,9 +1,14 @@
 require_relative "planner"
+require_relative "failure_diagnosis"
+require_relative "repository"
 
 module Sukashi
   class Comparison
-    def initialize(repo, config, plan)
+    def initialize(repo, config, plan, retry_full_only: false, failure_policy: "strict")
+      raise Error, "unknown failure policy: #{failure_policy}" unless %w[strict missed].include?(failure_policy)
+      raise Error, "missed policy requires retry_full_only" if failure_policy == "missed" && !retry_full_only
       @repo, @config, @plan = repo, config, plan
+      @retry_full_only, @failure_policy = retry_full_only, failure_policy
     end
 
     def run
@@ -13,12 +18,28 @@ module Sukashi
         @config.jobs.keys.sort == @plan["jobs"].keys.sort && @plan["jobs"].values.all? { |v| v.is_a?(Hash) }
       reports = @config.jobs.to_h do |name, job|
         decision = valid ? @plan["jobs"][name] : { "mode" => "full", "reason" => "stale or invalid plan", "reason_detail" => Reasons.build("invalid_plan") }
-        [name, compare(Runner.new(job, seed), decision, job["runner"])]
+        runner = Runner.new(job, seed)
+        if valid && decision["mode"] != "full"
+          saved = @plan["runtime"].is_a?(Hash) ? @plan["runtime"][name] : nil
+          current = runner.invoke(discover: true) if verified_runtime?(saved)
+          unless current && current.ok && verified_runtime?(current.runtime_identity) && saved == current.runtime_identity &&
+                 decision["inventory"].is_a?(Array) && current.ids == decision["inventory"]
+            detail = Reasons.build("runtime_identity_changed")
+            decision = { "mode" => "full", "reason" => detail.fetch("message"), "reason_detail" => detail }
+          end
+        end
+        [name, compare(runner, decision, job["runner"])]
       end
-      { "version" => 1, "schema_minor" => 1, "head" => @repo.revision("HEAD"), "seed" => seed, "plan_seconds" => @plan["plan_seconds"], "jobs" => reports, "ok" => reports.values.all? { |r| r["ok"] } }
+      { "version" => 1, "schema_minor" => 1, "failure_policy" => @failure_policy, "head" => @repo.revision("HEAD"), "seed" => seed, "plan_seconds" => @plan["plan_seconds"], "jobs" => reports, "ok" => reports.values.all? { |r| r["ok"] } }
     end
 
     private
+
+    def verified_runtime?(identity)
+      identity.is_a?(Hash) && identity["status"] == "verified" &&
+        identity["fingerprints"].is_a?(Array) && !identity["fingerprints"].empty? &&
+        identity["fingerprints"].all? { |value| value.is_a?(String) && value.match?(/\A[0-9a-f]{64}\z/) }
+    end
 
     def compare(runner, decision, kind)
       inventory = decision["inventory"]
@@ -46,6 +67,12 @@ module Sukashi
         []
       end
       drift = (subset && sample.ids != ids) || (inventory && !opaque && full.ids != inventory) || (subset && opaque)
+      diagnosis = FailureDiagnosis.new(runner).call(missing, enabled: @retry_full_only && kind != "command")
+      strict_ok = full.ok && !drift && (!subset || sample.ok) && missing.empty?
+      # Relax only a fully observed set of failures that all passed on retry.
+      explained = full.exit_status == 1 && !missing.empty? && !opaque && full.failures == missing &&
+        diagnosis["flaky_or_order_dependent"] == missing && diagnosis["retry_ok"]
+      ok = strict_ok || (@failure_policy == "missed" && !drift && (!subset || sample.ok) && explained)
       {
         "mode" => subset ? "subset" : (decision["mode"] == "skip" ? "skip" : "full"),
         "reason" => decision["reason"],
@@ -55,8 +82,10 @@ module Sukashi
         "selected_failures" => sample&.failures, "full_only_failures" => missing,
         "inventory_drift" => !!drift, "full_only_job" => opaque,
         "selected_seconds" => sample&.seconds, "full_seconds" => full.seconds,
-        "ok" => full.ok && !drift && (!subset || sample.ok) && missing.empty?
-      }
+        "selected_status" => sample&.status, "full_status" => full.status,
+        "selected_only_failures" => sample ? sample.failures - full.failures : [],
+        "ok" => !!ok
+      }.merge(diagnosis)
     end
   end
 end

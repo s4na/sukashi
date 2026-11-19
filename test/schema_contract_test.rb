@@ -21,7 +21,13 @@ class SchemaContractTest < Minitest::Test
     def ruby_sources(rev); sources.fetch(rev); end
     def revision(_); "head"; end
   end
-  Config = Struct.new(:jobs, :fingerprint, :ignore)
+  Config = Struct.new(:jobs, :fingerprint, :ignore, :full_on) do
+    def initialize(*args)
+      super
+      self.full_on ||= Sukashi::Configuration::DEFAULT_FULL_ON
+    end
+  end
+  RUNTIME = { "status" => "verified", "fingerprints" => ["a" * 64] }.freeze
   ROWS = [
     { "id" => "T#test_gift", "file" => "test/fee_test.rb", "line" => 2, "status" => "passed" },
     { "id" => "T#test_regular", "file" => "test/fee_test.rb", "line" => 3, "status" => "passed" }
@@ -39,7 +45,7 @@ class SchemaContractTest < Minitest::Test
   end
 
   def plan(repository, base: "base", rows: ROWS)
-    result = Sukashi::Result.new(ok: true, rows: rows)
+    result = Sukashi::Result.new(ok: true, rows: rows, runtime_identity: RUNTIME)
     runner = Object.new
     runner.define_singleton_method(:invoke) { |**_| result }
     stub_method(Sukashi::Runner, :new, runner) { Sukashi::Planner.new(repository, config, "head", base, 1).plan }
@@ -94,7 +100,7 @@ class SchemaContractTest < Minitest::Test
     document.delete("schema_minor")
     document["jobs"]["tests"].delete("reason_detail")
     validate("plan", document)
-    result = Sukashi::Result.new(ok: true, rows: ROWS, seconds: 0.01)
+    result = Sukashi::Result.new(ok: true, rows: ROWS, seconds: 0.01, runtime_identity: RUNTIME, status: "passed")
     runner = Object.new
     runner.define_singleton_method(:invoke) { |**_| result }
     report = stub_method(Sukashi::Runner, :new, runner) { Sukashi::Comparison.new(repo, config, document).run }
@@ -127,6 +133,26 @@ class SchemaContractTest < Minitest::Test
     validate("plan", document, valid: false)
   end
 
+  def test_runtime_identity_fallbacks_have_codes
+    result = Sukashi::Result.new(ok: true, rows: ROWS)
+    runner = Object.new
+    runner.define_singleton_method(:invoke) { |**_| result }
+    document = stub_method(Sukashi::Runner, :new, runner) { Sukashi::Planner.new(repo, config, "head", "base", 1).plan }
+    validate("plan", document)
+    assert_equal "runtime_identity_unavailable", document.dig("jobs", "tests", "reason_detail", "code")
+
+    saved = plan(repo)
+    changed = Sukashi::Result.new(ok: true, rows: ROWS, seconds: 0.01, status: "passed",
+                                  runtime_identity: { "status" => "verified", "fingerprints" => ["b" * 64] })
+    runner = Object.new
+    runner.define_singleton_method(:invoke) { |**_| changed }
+    report = stub_method(Sukashi::Runner, :new, runner) { Sukashi::Comparison.new(repo, config, saved).run }
+    validate("report", report)
+    assert_equal "runtime_identity_changed", report.dig("jobs", "tests", "reason_detail", "code")
+    assert_equal "strict", report.fetch("failure_policy")
+    assert_equal "passed", report.dig("jobs", "tests", "full_status")
+  end
+
   def test_all_codes_are_documented_and_schema_valid
     Sukashi::Reasons::MESSAGES.each_key do |code|
       assert_includes File.read(File.expand_path("../docs/json-contract.md", __dir__)), code
@@ -143,7 +169,7 @@ class SchemaContractTest < Minitest::Test
     document["schema_minor"] = 2
     document["jobs"]["tests"]["reason_detail"]["code"] = "future_full_reason"
     validate("plan", document)
-    result = Sukashi::Result.new(ok: true, rows: ROWS, seconds: 0.01)
+    result = Sukashi::Result.new(ok: true, rows: ROWS, seconds: 0.01, runtime_identity: RUNTIME, status: "passed")
     runner = Object.new
     runner.define_singleton_method(:invoke) { |**_| result }
     report = stub_method(Sukashi::Runner, :new, runner) { Sukashi::Comparison.new(repo, config, document).run }

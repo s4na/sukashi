@@ -235,6 +235,39 @@
     "plan_seconds": {
       "type": "number",
       "minimum": 0
+    },
+    "runtime": {
+      "description": "Per-job runtime identity observed while planning. Saved subset/skip decisions are reused only when it is verified and matches the current run.",
+      "type": "object",
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "object",
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "type": "string"
+              },
+              "fingerprints": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
     }
   },
   "additionalProperties": true

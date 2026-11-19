@@ -10,14 +10,18 @@ module Sukashi
 
     def plan
       started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      jobs = @config.jobs.transform_values do |job|
+      runtimes = {}
+      jobs = @config.jobs.to_h do |name, job|
         inventory = Runner.new(job, @seed).invoke(discover: true)
-        inventory.ok ? inventory.rows : nil
+        runtimes[name] = inventory.ok ? inventory.runtime_identity : nil
+        [name, inventory.ok ? inventory.rows : nil]
       end
       @test_paths = jobs.values.compact.flatten.filter_map { |r| r["file"] }.to_set
       reason = prepare
       decisions = jobs.to_h do |name, rows|
-        decision = if reason == :skip
+        decision = if runtimes.dig(name, "status") != "verified"
+          decision_with_reason("full", Reasons.build("runtime_identity_unavailable"))
+        elsif reason == :skip
           decision_with_reason("skip", Reasons.build("no_executable_changes"))
         elsif reason || !rows || rows.empty?
           decision_with_reason("full", reason || Reasons.build("inventory_unavailable"))
@@ -27,7 +31,7 @@ module Sukashi
         [name, decision.merge("inventory" => rows&.map { |r| r["id"] }&.sort)]
       end
       { "version" => 1, "schema_minor" => 1, "base" => @base, "head" => @head, "config" => @config.fingerprint,
-        "seed" => @seed, "jobs" => decisions,
+        "seed" => @seed, "jobs" => decisions, "runtime" => runtimes,
         "plan_seconds" => (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(3) }
     end
 
@@ -99,9 +103,9 @@ module Sukashi
     end
 
     def shared?(path)
-      path.start_with?("config/", "db/", "spec/support/", "test/support/", "app/views/", "app/assets/", "app/javascript/", ".github/") ||
-        %w[Gemfile Gemfile.lock .rspec .sukashi.yml spec_helper.rb rails_helper.rb test_helper.rb].include?(File.basename(path)) ||
-        path.end_with?(".gemspec")
+      @config.full_on.any? do |pattern|
+        File.fnmatch?(pattern, path, File::FNM_PATHNAME | File::FNM_DOTMATCH)
+      end
     end
 
     def select(rows)

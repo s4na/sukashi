@@ -20,7 +20,9 @@ module Sukashi
       "no_dependency" => "no dependency found",
       "no_selection" => "no confirmed selection",
       "all_candidates" => "all tests are candidates",
-      "invalid_plan" => "stale or invalid plan"
+      "invalid_plan" => "stale or invalid plan",
+      "runtime_identity_unavailable" => "runtime identity unavailable",
+      "runtime_identity_changed" => "runtime identity changed or unavailable"
     }.freeze
 
     def self.build(code, path: nil, paths: nil)
