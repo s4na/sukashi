@@ -85,7 +85,7 @@ glob は Ruby の `File.fnmatch?`（`FNM_PATHNAME | FNM_DOTMATCH`）で評価し
 assume: [constant_reachability]
 ```
 
-eval、名前を組み立てる `constantize` / `const_get`、`descendants`、名前と引数を動的に渡す `send`、`inflections` がリポジトリのどこかにある場合や、閉包に共有 hook・`full_on` のパス・グローバル変数への代入・読み込み時の外部呼び出し・gem 名前空間の再オープンが入る場合、Ruby 以外の追跡ファイル（`ignore` に一致するものを除く）にクラス名の形が現れる場合は、仮定を使わず通常の解析に戻ります。テスト間で DB やキャッシュを通じて受け渡される状態、メソッド本体から変数経由で外部へ保存したオブジェクト、gem によるクラスの列挙はこの仮定の外です。閉包にコントローラー・ヘルパー・`config/routes.rb` が入った場合と、`app/views/` のテンプレートにクラス名の形が現れる場合は、HTTP リクエストを発行するテストをまとめて候補に残します。仮定を使ったかどうかと使わなかった理由は plan の `assumptions` に出ます。全件との照合で効果と抜けを確かめてから使ってください。詳細は [selection-safety.md](docs/selection-safety.md) にあります。
+eval、名前を組み立てる `constantize` / `const_get`、`descendants`、名前と引数を動的に渡す `send`、`inflections` がリポジトリのどこかにある場合や、閉包に共有 hook・`full_on` のパス・グローバル変数への代入・読み込み時の外部呼び出し・gem 名前空間の再オープンが入る場合、Ruby 以外の追跡ファイル（`ignore` に一致するものを除く）にクラス名の形が現れる場合は、仮定を使わず通常の解析に戻ります。テスト間で DB やキャッシュを通じて受け渡される状態、メソッド本体から変数経由で外部へ保存したオブジェクト、gem によるクラスの列挙はこの仮定の外です。閉包にコントローラー・ヘルパー・`config/routes.rb` が入った場合は、HTTP リクエストを発行するテストをまとめて候補に残します。`app/views/` のテンプレートにクラス名の形が現れる場合は、view spec や mailer からの描画も考慮して仮定を使いません。仮定を使ったかどうかと使わなかった理由は plan の `assumptions` に出ます。全件との照合で効果と抜けを確かめてから使ってください。詳細は [selection-safety.md](docs/selection-safety.md) にあります。
 
 設定変更は plan の fingerprint に反映されます。この変更前に作った plan も不一致になり、既存の仕組みで全件実行に戻ります。
 
