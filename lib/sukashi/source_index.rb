@@ -260,6 +260,7 @@ module Sukashi
 
     def initialize(tree)
       @entries = Hash.new { |h, k| h[k] = [] }
+      @member_prefixes = []
       top = tree.statements.body
       root = top.first
       @simple = top.one? && root.is_a?(Prism::CallNode) && root.name == :draw && root.block.is_a?(Prism::BlockNode)
@@ -283,6 +284,7 @@ module Sukashi
         name = args.first.unescaped
         register(:get, "/" + name, name, "index")
         register(:post, "/" + name, name, "create")
+        @member_prefixes << "/#{name}/"
       elsif HTTP.include?(node.name) && args.size == 2 && args.first.is_a?(Prism::StringNode) && args.last.is_a?(Prism::KeywordHashNode)
         options = {}
         args.last.elements.each do |assoc|
@@ -301,6 +303,11 @@ module Sukashi
     end
 
     def register(verb, path, controller, action)
+      # Earlier resources declarations also match member URLs (including new/edit).
+      # Only trust a later literal route if it cannot match those routes.
+      if %i[get patch put delete].include?(verb) && @member_prefixes.any? { |prefix| path.start_with?(prefix) }
+        return
+      end
       key = [controller.split("_").map(&:capitalize).join + "Controller", false, action.to_sym]
       @entries[[verb, path]] << key
     end
