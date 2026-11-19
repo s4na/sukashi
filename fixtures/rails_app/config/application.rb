@@ -1,7 +1,7 @@
 require "action_controller/railtie"
 
 class OrderApp < Rails::Application
-  config.load_defaults 8.1
+  config.load_defaults Gem::Version.new(Rails.version) >= Gem::Version.new("8.1") ? 8.1 : 7.2
   config.root = File.expand_path("..", __dir__)
   config.eager_load = false
   config.action_controller.allow_forgery_protection = false if Rails.env.test?
