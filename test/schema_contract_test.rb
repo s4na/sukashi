@@ -162,19 +162,19 @@ class SchemaContractTest < Minitest::Test
 
   def test_minor_versions_accept_unknown_reason_codes
     document = plan(repo)
-    document["schema_minor"] = 2
+    document["schema_minor"] = 3
     document["jobs"]["tests"]["selected_details"].each_value { |detail| detail["code"] = "future_selected_reason" }
     document["jobs"]["tests"]["excluded_details"].each_value { |detail| detail["code"] = "future_excluded_reason" }
     validate("plan", document)
     document = plan(repo([]))
-    document["schema_minor"] = 2
+    document["schema_minor"] = 3
     document["jobs"]["tests"]["reason_detail"]["code"] = "future_full_reason"
     validate("plan", document)
     result = Sukashi::Result.new(ok: true, rows: ROWS, seconds: 0.01, runtime_identity: RUNTIME, status: "passed")
     runner = Object.new
     runner.define_singleton_method(:invoke) { |**_| result }
     report = stub_method(Sukashi::Runner, :new, runner) { Sukashi::Comparison.new(repo, config, document).run }
-    report["schema_minor"] = 2
+    report["schema_minor"] = 3
     validate("report", report)
     assert_equal "future_full_reason", report.dig("jobs", "tests", "reason_detail", "code")
   end

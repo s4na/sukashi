@@ -437,9 +437,11 @@ class SelectionTest < Minitest::Test
 
     plain = cli("plan", "--base", base, "--config", "plain.yml")
     plain.fetch("jobs").each_value { |job| assert_equal "full", job.fetch("mode") }
+    refute plain.key?("assumptions")
 
     plan = cli("plan", "--base", base, "--config", "assume.yml")
     refute_equal plain.fetch("config"), plan.fetch("config")
+    assert_equal({ "constant_reachability" => { "applied" => true } }, plan.fetch("assumptions"))
     rspec = plan.dig("jobs", "rspec")
     minitest = plan.dig("jobs", "minitest")
     assert_equal ["./spec/models/discount_spec.rb[1:1]"], rspec.fetch("selected").keys
@@ -457,6 +459,9 @@ class SelectionTest < Minitest::Test
     commit("discount change again")
     named = cli("plan", "--base", base, "--config", "assume.yml")
     named.fetch("jobs").each_value { |job| assert_equal "full", job.fetch("mode") }
+    outcome = named.dig("assumptions", "constant_reachability")
+    refute outcome.fetch("applied")
+    assert_equal "base: non-Ruby file names a changed class: docs/pricing.md", outcome.fetch("reason")
   end
 
   def test_predicate_change_runs_all_tests

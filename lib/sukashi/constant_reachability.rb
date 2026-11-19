@@ -15,7 +15,10 @@ module Sukashi
   #   - Ruby files whose string or symbol literals contain a name form of a
   #     class or module defined in U,
   #   - the files defining the superclass of a class in U (STI, descendants),
-  #     unless that superclass declares `self.abstract_class = true`.
+  #     unless that superclass declares `self.abstract_class = true`,
+  #   - every file that issues HTTP requests or visits, once U contains a
+  #     controller or config/routes.rb (requests reach controllers through
+  #     routing, not by naming them).
   #
   # Anything the assumption cannot bound makes #closure return nil, and the
   # caller keeps the existing per-test analysis. See docs/selection-safety.md.
@@ -36,6 +39,8 @@ module Sukashi
 
     Facts = Struct.new(:blob, :classes, :global_write, :load_receivers, :abstract)
 
+    ROUTES = "config/routes.rb".freeze
+
     attr_reader :forms, :escape
 
     # shared: path -> true when it matches full_on. external: normalized names
@@ -55,7 +60,8 @@ module Sukashi
       end
     end
 
-    def closure(changed)
+    # http: start with every HTTP caller, for changes rendered by templates.
+    def closure(changed, http: false)
       return escape!("eval or computed constant name") if @index.opaque?
       return escape!("reflective lookup in #{@reflective.first}") unless @reflective.empty?
       reach = Set.new
@@ -63,11 +69,20 @@ module Sukashi
       push = ->(path) { queue << path if reach.add?(path) }
       segments = Set.new
       @forms = Set.new
+      @http = false
+      pull_http = lambda do
+        next if @http
+        @http = true
+        @index.http_callers.each(&push)
+      end
       changed.each(&push)
+      pull_http.call if http
       until queue.empty?
         path = queue.shift
         @index.users_of(path).each(&push)
-        facts = @facts[path] or next
+        facts = @facts[path]
+        pull_http.call if path == ROUTES || controller?(path, facts)
+        next unless facts
         facts.classes.each { |name, _| segments.merge(name.split("::")) }
         # Application code does not name or instantiate test classes.
         next if @test_paths.include?(path)
@@ -84,12 +99,11 @@ module Sukashi
         end
       end
       reach.each do |path|
+        # The route table is drawn at boot and only maps requests to controllers.
+        next if path == ROUTES && !@hook_paths.include?(path)
         return escape!("shared setup or full_on path #{path}") if @hook_paths.include?(path) || @shared.call(path)
         facts = @facts[path] or next
         return escape!("global variable write in #{path}") if facts.global_write
-        if path.start_with?("app/controllers/") || facts.classes.any? { |name, _| name.end_with?("Controller") }
-          return escape!("controller #{path}")
-        end
         facts.load_receivers.each do |root|
           next if root && (segments.include?(root) || INERT_RECEIVERS.include?(root))
           return escape!("load-time call on #{root || 'a dynamic receiver'} in #{path}")
@@ -102,6 +116,11 @@ module Sukashi
       reach
     end
 
+    # Whether the last closure pulled in every HTTP caller.
+    def http?
+      @http
+    end
+
     def self.normalize(name)
       name.downcase.delete("_-")
     end
@@ -111,6 +130,10 @@ module Sukashi
     def escape!(reason)
       @escape = reason
       nil
+    end
+
+    def controller?(path, facts)
+      path.start_with?("app/controllers/") || facts&.classes&.any? { |name, _| name.end_with?("Controller") }
     end
 
     def external?(root)

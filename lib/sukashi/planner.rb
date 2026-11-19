@@ -18,6 +18,7 @@ module Sukashi
         [name, inventory.ok ? inventory.rows : nil]
       end
       @test_paths = jobs.values.compact.flatten.filter_map { |r| r["file"] }.to_set
+      @assumptions = {}
       reason = prepare
       decisions = jobs.to_h do |name, rows|
         decision = if runtimes.dig(name, "status") != "verified"
@@ -31,12 +32,21 @@ module Sukashi
         end
         [name, decision.merge("inventory" => rows&.map { |r| r["id"] }&.sort)]
       end
-      { "version" => 1, "schema_minor" => 1, "base" => @base, "head" => @head, "config" => @config.fingerprint,
-        "seed" => @seed, "jobs" => decisions, "runtime" => runtimes,
-        "plan_seconds" => (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(3) }
+      document = { "version" => 1, "schema_minor" => 2, "base" => @base, "head" => @head,
+                   "config" => @config.fingerprint, "seed" => @seed, "jobs" => decisions, "runtime" => runtimes }
+      document["assumptions"] = assumptions(reason) unless @config.assume.empty?
+      document.merge("plan_seconds" => (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(3))
     end
 
     private
+
+    # Per configured assumption: whether it bounded the selection, and if not, why.
+    def assumptions(reason)
+      code = reason == :skip ? "no_executable_changes" : reason&.fetch("code")
+      @config.assume.to_h do |name|
+        [name, @assumptions.fetch(name) { { "applied" => false, "reason" => "not evaluated: #{code || 'planning stopped'}" } }]
+      end
+    end
 
     def decision_with_reason(mode, detail)
       { "mode" => mode, "reason" => detail.fetch("message"), "reason_detail" => detail }
@@ -105,19 +115,34 @@ module Sukashi
     end
 
     # Both sides' escape closures, or nil when either side escapes the
-    # assumption; the per-test analysis then decides alone.
+    # assumption; the per-test analysis then decides alone. The outcome is
+    # recorded for the plan's `assumptions` entry.
     def constant_closures(changes)
       external = [@base, @head].flat_map do |rev|
         (@repo.file(rev, "Gemfile.lock") || "").scan(/^ {4}([A-Za-z0-9_.-]+) \(/).flatten
       end.map { |name| ConstantReachability.normalize(name) }.to_set
-      [[@old, @base, changes.map(&:first)], [@new, @head, changes.map(&:last)]].map do |index, rev, paths|
+      closures = [[@old, @base, "base", changes.map(&:first)], [@new, @head, "head", changes.map(&:last)]].map do |index, rev, side, paths|
         analysis = ConstantReachability.new(index, @test_paths, shared: method(:shared?), external: external)
         reach = analysis.closure(paths.compact)
-        return nil unless reach
-        named = @repo.grep_other_files(rev, analysis.forms.to_a)
-        return nil if named.any? { |path| shared?(path) || !ignored?(path) }
+        loop do
+          return assumption_skipped("#{side}: #{analysis.escape}") unless reach
+          named = @repo.grep_other_files(rev, analysis.forms.to_a)
+          # Templates are rendered only through requests: cover them with every HTTP caller.
+          templates, others = named.partition { |path| path.start_with?("app/views/") }
+          blocking = others.find { |path| shared?(path) || !ignored?(path) }
+          return assumption_skipped("#{side}: non-Ruby file names a changed class: #{blocking}") if blocking
+          break if templates.empty? || analysis.http?
+          reach = analysis.closure(paths.compact, http: true)
+        end
         reach
       end
+      @assumptions["constant_reachability"] = { "applied" => true }
+      closures
+    end
+
+    def assumption_skipped(reason)
+      @assumptions["constant_reachability"] = { "applied" => false, "reason" => reason }
+      nil
     end
 
     def ignored?(path)

@@ -11,9 +11,11 @@ class ConstantReachabilityTest < Minitest::Test
     "test/other_test.rb" => "class OtherTest; def test_run; Other.run; end; end"
   }.freeze
 
-  def analysis(extra = {}, external: Set.new, shared: ->(_) { false })
+  REQUEST = { "test/coupons_request_test.rb" => "class CouponsRequestTest; def test_i; get '/c'; end; end" }.freeze
+
+  def analysis(extra = {}, external: Set.new, shared: ->(_) { false }, tests: TESTS)
     index = Sukashi::SourceIndex.new(BASE.merge(extra))
-    Sukashi::ConstantReachability.new(index, TESTS, shared: shared, external: external)
+    Sukashi::ConstantReachability.new(index, tests, shared: shared, external: external)
   end
 
   def closure(extra = {}, **options)
@@ -73,10 +75,28 @@ class ConstantReachabilityTest < Minitest::Test
     assert_escapes({ "app/models/coupon.rb" => "class String; end" }, /external namespace/)
     assert_escapes({ "app/models/coupon.rb" => "module Rails; class Coupon; end; end" }, /external namespace/,
                    external: Set["rails"])
-    assert_escapes({ "app/controllers/coupons_controller.rb" => "class CouponsController; def i; Coupon; end; end" },
-                   /controller/)
     assert_escapes({ "lib/setup.rb" => "Coupon.rate(true)" }, /full_on/, shared: ->(path) { path == "lib/setup.rb" })
     refute_nil closure("app/models/coupon.rb" => "class Coupon; RATES = [1].freeze; scope :x, -> { Clock.now }; end")
+  end
+
+  def test_controllers_and_routes_bring_in_http_callers
+    tests = TESTS | REQUEST.keys
+    controller = { "app/controllers/coupons_controller.rb" => "class CouponsController; def i; Coupon; end; end" }
+    subject = analysis(controller.merge(REQUEST), tests: tests)
+    reach = subject.closure(["app/models/coupon.rb"])
+    assert_includes reach, "test/coupons_request_test.rb"
+    refute_includes reach, "test/other_test.rb"
+    assert subject.http?
+
+    routes = { "config/routes.rb" => "Rails.application.routes.draw { resources :coupons }" }
+    reach = analysis(routes.merge(REQUEST), tests: tests).closure(["app/models/coupon.rb"])
+    assert_includes reach, "config/routes.rb"
+    assert_includes reach, "test/coupons_request_test.rb"
+
+    subject = analysis(REQUEST, tests: tests)
+    refute_includes subject.closure(["app/models/coupon.rb"]), "test/coupons_request_test.rb"
+    refute subject.http?
+    assert_includes subject.closure(["app/models/coupon.rb"], http: true), "test/coupons_request_test.rb"
   end
 
   def test_shared_hooks_in_the_closure_escape

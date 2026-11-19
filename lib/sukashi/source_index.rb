@@ -98,6 +98,11 @@ module Sukashi
     end
 
     # Files that name, require or route to path (one reverse edge, not the closure).
+    # Files that issue HTTP requests or visits (request, integration and system tests).
+    def http_callers
+      @http_calls.map(&:first).uniq
+    end
+
     def users_of(path)
       @reverse.fetch(path, [])
     end
