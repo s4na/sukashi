@@ -56,7 +56,7 @@ module Sukashi
         ok = system(env, [command.first, command.first], *command.drop(1), out: :err)
         exit_status = $?.exitstatus
         rows = read_reports(dir) unless plain
-        ok &&= !rows.any? { |row| row["status"] == "failed" } if rows && @job["runner"] == "rspec"
+        ok &&= !rows.any? { |row| row["status"] == "failed" } if rows
         Result.new(ok: !!ok, rows: rows, status: ok.nil? ? "failed_to_start" : (ok ? "passed" : "failed"),
                    runtime_identity: discover ? read_runtime_identity(dir) : nil, exit_status: exit_status,
                    seconds: (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(3))

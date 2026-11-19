@@ -110,6 +110,26 @@ class DiagnosticsTest < Minitest::Test
     assert_equal "passed", passing.status
   end
 
+  def test_minitest_failure_survives_a_successful_wrapper
+    Dir.mktmpdir do |dir|
+      suite = File.join(dir, "wrapper_test.rb")
+      File.write(suite, <<~RUBY)
+        require "minitest/autorun"
+        class WrapperTest < Minitest::Test
+          def test_value
+            flunk "recorded failure"
+          end
+        end
+      RUBY
+      wrapper = 'system(RbConfig.ruby, ARGV.fetch(0)); exit 0'
+      job = { "runner" => "minitest", "command" => [RbConfig.ruby, "-e", wrapper, suite] }
+      report = Sukashi::Comparison.new(nil, nil, {}).send(:compare, Sukashi::Runner.new(job, 1), { "mode" => "full" }, "minitest")
+      assert_equal ["WrapperTest#test_value"], report.fetch("full_failures")
+      assert_equal "failed", report.fetch("full_status")
+      refute report.fetch("ok")
+    end
+  end
+
   def test_comparison_serializes_launch_status
     config = Struct.new(:jobs, :fingerprint).new(
       { "custom" => { "runner" => "command", "command" => ["sukashi-nonexistent-test-command"] } }, "config")
