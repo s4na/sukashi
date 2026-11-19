@@ -144,6 +144,21 @@ class SchemaContractTest < Minitest::Test
     assert_equal "full", report.dig("jobs", "tests", "mode")
   end
 
+  def test_full_fallback_checks_the_fresh_inventory
+    saved = plan(repo)
+    fresh_rows = ROWS + [ROWS.first.merge("id" => "T#test_new", "line" => 5)]
+    [fresh_rows, ROWS, nil].each do |executed|
+      runner = Object.new
+      runner.define_singleton_method(:invoke) do |discover: false, **_|
+        Sukashi::Result.new(ok: true, rows: discover ? fresh_rows : executed, runtime_identity: RUNTIME)
+      end
+      report = stub_method(Sukashi::Runner, :new, runner) { Sukashi::Comparison.new(repo, config, saved).run }
+      assert_equal "full", report.dig("jobs", "tests", "mode")
+      assert_equal executed != fresh_rows, report.dig("jobs", "tests", "inventory_drift")
+      assert_equal executed == fresh_rows, report.fetch("ok")
+    end
+  end
+
   def test_schema_rejects_wrong_version_mode_and_ids
     document = plan(repo)
     document["version"] = 2

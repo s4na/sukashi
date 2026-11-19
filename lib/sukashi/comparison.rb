@@ -27,6 +27,7 @@ module Sukashi
                  current.inventory_digest == decision["inventory_digest"]
             detail = Reasons.build("runtime_identity_changed")
             decision = { "mode" => "full", "reason" => detail.fetch("message"), "reason_detail" => detail }
+            decision["inventory"] = current.ids if current&.ok
           end
         end
         report = compare(runner, decision, job["runner"])
@@ -69,7 +70,7 @@ module Sukashi
       else
         []
       end
-      drift = (subset && sample.ids != ids) || (inventory && !opaque && full.ids != inventory) || (subset && opaque)
+      drift = (subset && sample.ids != ids) || (inventory && full.ids != inventory)
       diagnosis = FailureDiagnosis.new(runner).call(missing, enabled: @retry_full_only && kind != "command")
       strict_ok = full.ok && !drift && (!subset || sample.ok) && missing.empty?
       # Relax only a fully observed set of failures that all passed on retry.
