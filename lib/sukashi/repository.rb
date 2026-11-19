@@ -47,6 +47,27 @@ module Sukashi
       changes
     end
 
+    # Tracked paths at commit, other than Ruby sources, containing any of the
+    # fixed strings. git grep exits 1 when nothing matches.
+    def grep_other_files(commit, needles)
+      return [] if needles.empty?
+      args = ["grep", "-l", "-z", "-F", "-I", *needles.flat_map { |n| ["-e", n] }, commit, "--", ".", ":(exclude)*.rb", ":(exclude)*.ru"]
+      raise Error, "git arguments must not contain NUL bytes" if args.any? { |arg| arg.include?("\0") }
+      Diagnostics.command(["git", *args])
+      output, stderr, status = Open3.capture3("git", *args)
+      return [] if status.exitstatus == 1 && stderr.empty?
+      raise Error, "git grep failed (exit #{status.exitstatus}): #{stderr.strip}" unless status.success?
+      output.split("\0").map { |entry| entry.delete_prefix("#{commit}:") }
+    rescue SystemCallError => e
+      raise Error, "cannot start git: #{e.message}"
+    end
+
+    def file(commit, path)
+      git("cat-file", "blob", "#{commit}:#{path}")
+    rescue Error
+      nil
+    end
+
     # Use the committed blobs on both sides (including deleted files) without checking out B.
     def ruby_sources(commit)
       paths = git("ls-tree", "-rz", commit).split("\0").filter_map do |entry|

@@ -15,7 +15,7 @@ module Sukashi
     CONTROLLER_DISPATCH = %i[render render_to_body render_to_string process process_action dispatch send_action].freeze
     MINITEST_HOOKS = %i[before_setup setup after_setup before_teardown teardown after_teardown].freeze
 
-    attr_reader :sources, :methods, :definitions, :tests, :routes, :dependencies, :errors, :hooks, :unscoped_hooks, :controller_hooks, :custom_http_pipeline, :refinement_scopes
+    attr_reader :sources, :methods, :definitions, :tests, :routes, :dependencies, :errors, :hooks, :unscoped_hooks, :controller_hooks, :custom_http_pipeline, :refinement_scopes, :trees
 
     def initialize(sources)
       @sources = sources
@@ -37,9 +37,11 @@ module Sukashi
       @assigned_constants = Set.new
       @constant_owners = Hash.new { |h, k| h[k] = Set.new }
       @errors = []
+      @trees = {}
       sources.each do |path, text|
         result = Prism.parse(text, filepath: path)
         if result.success?
+          @trees[path] = result.value
           scan(result.value, path, nil)
           @routes = Routes.new(result.value) if path == "config/routes.rb"
         else
@@ -88,6 +90,16 @@ module Sukashi
       @assigned_constants.include?(nil) || parts.any? { |part| @assigned_constants.include?(part) || @constant_owners[part].size > 1 } ||
         @open_dispatch.include?(nil) || @open_dispatch.include?(owner) ||
         @open_dispatch_names.include?(owner.to_s.split("::").last)
+    end
+
+    # eval or a computed constant name can reach any class by a runtime string.
+    def opaque?
+      @open_dispatch.include?(nil) || @assigned_constants.include?(nil)
+    end
+
+    # Files that name, require or route to path (one reverse edge, not the closure).
+    def users_of(path)
+      @reverse.fetch(path, [])
     end
 
     def shadowed?(key)

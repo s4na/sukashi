@@ -12,7 +12,9 @@ module Sukashi
       **/spec_helper.rb **/rails_helper.rb **/test_helper.rb **/*.gemspec
     ].freeze
 
-    attr_reader :jobs, :ignore, :full_on
+    ASSUMPTIONS = %w[constant_reachability].freeze
+
+    attr_reader :jobs, :ignore, :full_on, :assume
 
     def initialize(path)
       raw = begin
@@ -29,6 +31,11 @@ module Sukashi
         raise Error, "full_on must contain nonempty path patterns"
       end
       @full_on = (DEFAULT_FULL_ON + additions).uniq.freeze
+      @assume = raw ? raw.fetch("assume", []) : []
+      unless strings?(@assume) && (@assume - ASSUMPTIONS).empty?
+        raise Error, "assume must list known assumptions: #{ASSUMPTIONS.join(', ')}"
+      end
+      @assume = @assume.uniq.sort.freeze
       raise Error, "configure at least one test job" unless jobs.is_a?(Hash) && !jobs.empty?
       jobs.each do |name, job|
         unless name.is_a?(String) && job.is_a?(Hash) && %w[rspec minitest command].include?(job["runner"]) &&
@@ -39,7 +46,8 @@ module Sukashi
     end
 
     def fingerprint
-      Digest::SHA256.hexdigest(JSON.generate([jobs, ignore, full_on]))
+      # Plans made without assumptions keep their previous fingerprint.
+      Digest::SHA256.hexdigest(JSON.generate([jobs, ignore, full_on, *([assume] unless assume.empty?)]))
     end
 
     private

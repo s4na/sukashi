@@ -4,6 +4,7 @@ Changes to the CLI and its JSON reports are recorded here. The installed version
 
 ## Unreleased
 
+- Add the opt-in `assume: [constant_reachability]` setting, which excludes test files outside the escape closure of the change with the `unreachable_change` reason.
 - Add English installation, usage, configuration, and limitations documentation.
 - Add package description, changelog and issue-tracker links, and RubyGems MFA metadata.
 - Include the English README and changelog in the gem package.

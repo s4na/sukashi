@@ -21,10 +21,11 @@ class SchemaContractTest < Minitest::Test
     def ruby_sources(rev); sources.fetch(rev); end
     def revision(_); "head"; end
   end
-  Config = Struct.new(:jobs, :fingerprint, :ignore, :full_on) do
+  Config = Struct.new(:jobs, :fingerprint, :ignore, :full_on, :assume) do
     def initialize(*args)
       super
       self.full_on ||= Sukashi::Configuration::DEFAULT_FULL_ON
+      self.assume ||= []
     end
   end
   RUNTIME = { "status" => "verified", "fingerprints" => ["a" * 64] }.freeze

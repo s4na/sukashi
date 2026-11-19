@@ -18,6 +18,7 @@ module Sukashi
       "unresolved_path" => "unresolved execution path",
       "unchanged_arm" => "only unchanged arm reachable",
       "no_dependency" => "no dependency found",
+      "unreachable_change" => "outside the constant reachability closure of the change",
       "no_selection" => "no confirmed selection",
       "all_candidates" => "all tests are candidates",
       "invalid_plan" => "stale or invalid plan",

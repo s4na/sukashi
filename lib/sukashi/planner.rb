@@ -1,4 +1,5 @@
 require_relative "selection"
+require_relative "constant_reachability"
 require_relative "runner"
 require_relative "reasons"
 
@@ -99,7 +100,28 @@ module Sukashi
       @local_users = old_users | new_users
       @analyses = [Reachability.new(@old, @targets, @test_paths, old_users),
                    Reachability.new(@new, @targets, @test_paths, new_users)]
+      @unreachable = constant_closures(changes) if @config.assume.include?("constant_reachability")
       nil
+    end
+
+    # Both sides' escape closures, or nil when either side escapes the
+    # assumption; the per-test analysis then decides alone.
+    def constant_closures(changes)
+      external = [@base, @head].flat_map do |rev|
+        (@repo.file(rev, "Gemfile.lock") || "").scan(/^ {4}([A-Za-z0-9_.-]+) \(/).flatten
+      end.map { |name| ConstantReachability.normalize(name) }.to_set
+      [[@old, @base, changes.map(&:first)], [@new, @head, changes.map(&:last)]].map do |index, rev, paths|
+        analysis = ConstantReachability.new(index, @test_paths, shared: method(:shared?), external: external)
+        reach = analysis.closure(paths.compact)
+        return nil unless reach
+        named = @repo.grep_other_files(rev, analysis.forms.to_a)
+        return nil if named.any? { |path| shared?(path) || !ignored?(path) }
+        reach
+      end
+    end
+
+    def ignored?(path)
+      @config.ignore.any? { |pattern| File.fnmatch?(pattern, path, File::FNM_PATHNAME | File::FNM_DOTMATCH) }
     end
 
     def shared?(path)
@@ -127,6 +149,10 @@ module Sukashi
         end
         if @only_local_specs && path && !@local_users.include?(path)
           record_reason(excluded, excluded_details, row["id"], "other_test_file")
+          next
+        end
+        if @unreachable && path && !@unreachable.first.include?(@moved.fetch(path, path)) && !@unreachable.last.include?(path)
+          record_reason(excluded, excluded_details, row["id"], "unreachable_change")
           next
         end
         verdicts = [@analyses.first.inspect_test(@moved.fetch(path, path), line), @analyses.last.inspect_test(path, line)]
