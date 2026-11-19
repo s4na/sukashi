@@ -1,0 +1,12 @@
+AllCops:
+  TargetRubyVersion: 3.2
+  NewCops: disable
+  Include:
+    - 'lib/**/*.rb'
+    - 'test/**/*.rb'
+    - 'exe/*'
+    - 'Rakefile'
+    - '*.gemspec'
+  Exclude:
+    - 'vendor/**/*'
+    - 'fixtures/**/*'

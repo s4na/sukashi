@@ -1,8 +1,8 @@
-require "rspec/core/formatters/json_formatter"
+require_relative "rspec_report"
 require_relative "test_helpers"
 
 module Sukashi
-  class RSpecInventory < RSpec::Core::Formatters::JsonFormatter
+  class RSpecInventory < RSpecReport
     RSpec::Core::Formatters.register self, :dump_summary, :stop, :close
 
     private
