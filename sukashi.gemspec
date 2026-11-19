@@ -14,7 +14,7 @@ Gem::Specification.new do |spec|
   spec.metadata["rubygems_mfa_required"] = "true"
   spec.metadata["source_revision"] = Sukashi::SOURCE_REVISION
   spec.required_ruby_version = ">= 3.2"
-  spec.files = Dir["exe/*", "lib/**/*.rb", "docs/test-selection.md", "README.md", "README.en.md", "CHANGELOG.md", "LICENSE", "RELEASE"]
+  spec.files = Dir["exe/*", "lib/**/*.rb", "docs/*.md", "README.md", "README.en.md", "CHANGELOG.md", "LICENSE", "RELEASE"]
   spec.bindir = "exe"
   spec.executables = ["sukashi"]
   spec.add_dependency "prism", ">= 1.4", "< 3"
