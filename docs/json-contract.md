@@ -1,4 +1,4 @@
-# JSON contract (1.1)
+# JSON contract (plan 1.2, report 1.1)
 
 The checked-in schemas use JSON Schema Draft 2020-12. `version` is the major version; `schema_minor` is additive evolution within that major. Missing `schema_minor` in an existing version-1 plan means 1.0. The runner continues to accept these old plans. Old reports without `version` predate the published report contract.
 
@@ -6,7 +6,7 @@ Readers must ignore unknown fields and handle unknown reason codes conservativel
 
 ## Fields
 
-Plans contain committed `base` (nullable when unavailable), `head`, configuration fingerprint `config`, random `seed`, discovery/planning elapsed `plan_seconds`, a job-name keyed `jobs` map, and a job-name keyed `runtime` map. A runtime entry is null when discovery failed; otherwise it has a `status`, and a `verified` entry lists SHA-256 `fingerprints` of the observed Ruby/Bundler environment. Saved subset/skip decisions are reused only when the current run reports the same verified identity.
+Plans contain committed `base` (nullable when unavailable), `head`, configuration fingerprint `config`, random `seed`, discovery/planning elapsed `plan_seconds`, a job-name keyed `jobs` map, and a job-name keyed `runtime` map. Since plan minor 2, a plan whose configuration lists `assume` entries has an `assumptions` map keyed by assumption name; each entry has boolean `applied` and, when not applied, a human `reason` (consumers must not parse it). A runtime entry is null when discovery failed; otherwise it has a `status`, and a `verified` entry lists SHA-256 `fingerprints` of the observed Ruby/Bundler environment. Saved subset/skip decisions are reused only when the current run reports the same verified identity.
 
 Each job has `mode` (full/subset/skip) and `inventory` (IDs or null). Full/skip decisions carry the original human `reason` and additive `reason_detail`. Subsets retain the original ID-to-message `selected`/`excluded` maps and add ID-to-detail `selected_details`/`excluded_details`, `file_level_count` and branch evidence. A branch contains path, method, then/else arm and reachable IDs.
 
@@ -35,6 +35,7 @@ A reason detail contains `code`, a human `message`, and optional `path` or `path
 | `unresolved_path` | unresolved execution path |
 | `unchanged_arm` | only unchanged arm reachable |
 | `no_dependency` | no dependency found |
+| `unreachable_change` | outside the constant reachability closure of the change (opt-in `assume: [constant_reachability]`) |
 | `no_selection` | no confirmed selection |
 | `all_candidates` | all tests are candidates |
 | `invalid_plan` | stale or invalid plan |

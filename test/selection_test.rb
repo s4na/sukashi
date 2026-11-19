@@ -389,6 +389,86 @@ class SelectionTest < Minitest::Test
     assert_empty job.fetch("full_only_failures")
   end
 
+  def test_constant_reachability_assumption_narrows_a_global_hook
+    write("app/models/discount.rb", <<~RUBY)
+      class Discount
+        def self.rate(member)
+          if member
+            10
+          else
+            0
+          end
+        end
+      end
+    RUBY
+    write("spec/models/discount_spec.rb", <<~RUBY)
+      require_relative "../../app/models/discount"
+      RSpec.describe Discount do
+        it("member") { expect(Discount.rate(true)).to eq(10) }
+      end
+    RUBY
+    write("test/discount_test.rb", <<~RUBY)
+      require "minitest/autorun"
+      require_relative "../app/models/discount"
+      class DiscountTest < Minitest::Test
+        def test_member
+          assert_equal 10, Discount.rate(true)
+        end
+      end
+    RUBY
+    # One project-wide hook used to make every test an unresolved candidate.
+    replace("spec/rails_helper.rb", "RSpec.configure { |config| config.include",
+            "RSpec.configure { |config| config.before { nil } }\nRSpec.configure { |config| config.include")
+    commit("discount and a global hook")
+    base = cmd("git", "rev-parse", "HEAD")
+    replace("app/models/discount.rb", "10", "20")
+    commit("discount change")
+    jobs = <<~YAML
+      jobs:
+        rspec:
+          runner: rspec
+          command: [rspec]
+        minitest:
+          runner: minitest
+          command: [bin/rails, "test:all"]
+    YAML
+    write("plain.yml", jobs)
+    write("assume.yml", jobs + "assume: [constant_reachability]\n")
+
+    plain = cli("plan", "--base", base, "--config", "plain.yml")
+    plain.fetch("jobs").each_value { |job| assert_equal "full", job.fetch("mode") }
+    refute plain.key?("assumptions")
+
+    plan = cli("plan", "--base", base, "--config", "assume.yml")
+    refute_equal plain.fetch("config"), plan.fetch("config")
+    assert_equal({ "constant_reachability" => { "applied" => true } }, plan.fetch("assumptions"))
+    rspec = plan.dig("jobs", "rspec")
+    minitest = plan.dig("jobs", "minitest")
+    assert_equal ["./spec/models/discount_spec.rb[1:1]"], rspec.fetch("selected").keys
+    # Tests with a custom runner protocol stay selected before any exclusion.
+    assert_equal ["DiscountTest#test_member", RACK_REQUEST, RECEIPT_SYSTEM].sort, minitest.fetch("selected").keys
+    assert_equal(%w[custom_test_protocol custom_test_protocol],
+                 [RACK_REQUEST, RECEIPT_SYSTEM].map { |id| minitest.dig("selected_details", id, "code") })
+    assert_equal 4, rspec.fetch("excluded").size
+    [rspec, minitest].each do |job|
+      refute_empty job.fetch("excluded")
+      assert_equal job.fetch("inventory").size, job.fetch("selected").size + job.fetch("excluded").size
+      assert(job.fetch("excluded_details").values.all? { |d| d.fetch("code") == "unreachable_change" })
+    end
+
+    write("assume.yml", jobs + "assume: [constant_reachability]\nignore: []\n")
+    write("docs/pricing.md", "Members get a Discount.\n")
+    commit("document discount")
+    base = cmd("git", "rev-parse", "HEAD")
+    replace("app/models/discount.rb", "20", "30")
+    commit("discount change again")
+    named = cli("plan", "--base", base, "--config", "assume.yml")
+    named.fetch("jobs").each_value { |job| assert_equal "full", job.fetch("mode") }
+    outcome = named.dig("assumptions", "constant_reachability")
+    refute outcome.fetch("applied")
+    assert_equal "base: non-Ruby file names a changed class: docs/pricing.md", outcome.fetch("reason")
+  end
+
   def test_predicate_change_runs_all_tests
     change_fee("if gift", "unless gift")
     report = cli("check", "--base", @base, code: 1)

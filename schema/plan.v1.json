@@ -236,6 +236,25 @@
       "type": "number",
       "minimum": 0
     },
+    "assumptions": {
+      "description": "Per configured opt-in assumption: whether it bounded the selection and, when not, why. Present only when assumptions are configured (schema_minor 2).",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "applied"
+        ],
+        "properties": {
+          "applied": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
     "runtime": {
       "description": "Per-job runtime identity observed while planning. Saved subset/skip decisions are reused only when it is verified and matches the current run.",
       "type": "object",

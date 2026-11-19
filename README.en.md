@@ -66,6 +66,12 @@ ignore: ["docs/**/*.md"]
 
 Commands are argument arrays, not shell strings. RSpec commands must accept RSpec CLI options; Minitest commands must start Minitest. The `command` runner executes an existing full job and checks its exit status. Jobs without individual test IDs appear in `full_only_job`.
 
+### Constant reachability assumption (opt-in)
+
+`assume: [constant_reachability]` assumes that project code reaches a project class only by naming it in a constant, string, or symbol, or through a subclass relation. Starting from the changed files, Sukashi repeatedly adds files that refer to them, Ruby files whose literals contain a form of a defined class name, and superclass definitions. Test files outside that closure are excluded as `unreachable_change`, even when one shared hook would otherwise keep every test as a candidate.
+
+The assumption is not used, and normal analysis applies, when the repository contains `eval`, `constantize` or `const_get` on a computed name, `descendants`, `send` with a computed name and arguments, or `inflections`; when the closure contains shared hooks, `full_on` paths, global variable writes, load-time calls on outside constants, or reopened gem namespaces; or when a tracked non-Ruby file outside `ignore` contains a form of a class name. State passed between tests through databases or caches, objects stored elsewhere by method bodies, and gems that enumerate classes are outside the assumption. When the closure contains a controller, a view helper, or `config/routes.rb`, or a template under `app/views/` contains a class-name form, every test that issues HTTP requests stays a candidate. The plan's `assumptions` entry shows whether the assumption was applied and, if not, why. Verify its effect with the full-suite comparison before relying on it. See [selection-safety.md](docs/selection-safety.md).
+
 ## Scope and limitations
 
 The initial selector can distinguish changes to one arm of an `if ... else ... end` in a class method that directly tests a boolean parameter. Tests passing literal arguments, or literal-URL Rails routes through an action to such a method, may exclude tests that only reach the opposite arm. Controller response tracing is limited to simple `render plain:` calls.

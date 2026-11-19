@@ -21,6 +21,34 @@
 
 これは回帰テストとの対応表であり、各行の全条件を網羅する証明ではない。既知の未対応構文は安全側に戻す。ただし未知の動的な介入を検出し切れているとは限らないため、全件照合を続ける。
 
+## 定数到達性の仮定（opt-in）
+
+`assume: [constant_reachability]` は上表とは別の、明示的に受け入れる仮定です（[#36](https://github.com/s4na/sukashi/issues/36)）。共有 hook・`let`・未解析の呼び出しで全テストが候補に残る状況で、変更から到達しえないテストファイルだけを外します。実装は [constant_reachability.rb](../lib/sukashi/constant_reachability.rb)、回帰テストは [constant_reachability_test.rb](../test/constant_reachability_test.rb) と `test_constant_reachability_assumption_narrows_a_global_hook`。
+
+**仮定**: プロジェクトのクラスに到達するには、その名前を定数・文字列・シンボルで書くか、継承関係をたどる必要がある。テスト間で共有される状態を通じて変更の影響が伝わることはない。
+
+**閉包 U**: 変更ファイル（各版で旧・新パス）から始め、次を追加し続ける。
+
+- U のファイルを定数・factory・shared example・ルート・`require_relative` で参照するファイル。
+- U で定義するクラス・モジュールの名前の形（CamelCase、snake_case、末尾語の複数形を含む接頭辞、不規則複数形）を文字列・シンボルリテラルに含む Ruby ファイル。テストファイルが定義するクラスは対象外。
+- U のクラスのスーパークラスを定義するファイル（STI や `find` で派生クラスが返るため）。`self.abstract_class = true` を宣言するクラスは除く。
+- U にコントローラー・ビューヘルパー（`app/controllers/`・`app/helpers/` 配下か、名前が `Controller`・`Helper` で終わるクラス・モジュール）か `config/routes.rb` が入ったら、HTTP リクエスト・`visit` を発行するすべてのファイル。リクエストはルーティングを経てコントローラーに届き、テンプレートはヘルパーをメソッド名で呼ぶため、名前を書かずに到達する。URL の解決可否にかかわらずまとめて加える。
+- `app/views/` のテンプレートが名前の形を含む場合も、同じく HTTP を発行するすべてのファイルを加える（テンプレートはリクエスト経由でしか描画されないため）。
+
+旧版の U にも新版の U にも入らないテストファイルの例を `unreachable_change` で除外する。変更されたテスト、カスタムプロトコルは従来どおり先に選ぶ。U の中のテストは従来の解析で判定する。
+
+**仮定を使わない条件**（各版で一つでも該当すれば、その PR では除外しない）:
+
+- リポジトリのどこかに eval・計算された定数名の代入、名前を組み立てる `constantize` / `const_get` 系、`descendants` / `subclasses` / `each_object` / `const_missing`、メソッド名を計算して引数も渡す `send` 系、計算した名前の `method` 系、`inflections` がある。
+- U に共有 hook（テスト以外の hook と `config.before` などのスコープ外 hook）、`full_on` に一致するパス（`config/routes.rb` を除く）、グローバル変数への代入がある。HTTP を発行するファイルが support など `full_on` 側にあれば、ここで使わない側に倒れる。
+- U のファイルが読み込み時（メソッド・lambda・遅延ブロックの外）に、U で定義していない定数や動的な receiver のメソッドを呼ぶ。`RSpec`・`FactoryBot`・`Struct` など状態を保持しない一部の定数は除く。
+- U がコアや Gemfile.lock の gem 名と同じ最上位名前空間を再オープンする。
+- `ignore` に一致しない Ruby 以外の追跡ファイル（`app/views/` 以外の fixture YAML、アセット、ドキュメントなど）に名前の形が現れる。
+
+plan の `assumptions.constant_reachability` に、仮定を使ったか（`applied`）と、使わなかった場合の理由（`reason`、例: `head: reflective lookup in app/models/x.rb`）を出す。shadow 計測では、この理由の分布で仮定が効かない原因を集計する。
+
+**仮定の外にある抜け道**: メソッド本体が変数経由の receiver（キャッシュ、レジストリ）へ U のオブジェクトを保存し、別のテストが読む場合。DB・ファイル・プロセス内状態を通じたテスト間の受け渡し。gem がクラスを登録・列挙する場合。名前のリテラルを組み立てて別の手段で解決する場合。これらは静的には閉じられないため、opt-in とし、shadow の全件照合で `full_only_failures` を確認する。
+
 ## ファイル単位の allowlist へ進める手順
 
 1. 抜け道が見つかったら、最初に上表のどの前提が崩れたかと最小の回帰例を記録する。影響範囲が確定するまで絞り込みを増やさない。

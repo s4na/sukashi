@@ -93,5 +93,15 @@ class FullOnTest < Minitest::Test
     refute_equal original.fingerprint, config("full_on" => ["lib/shared/**"]).fingerprint
     legacy = Digest::SHA256.hexdigest(JSON.generate([original.jobs, original.ignore]))
     refute_equal legacy, original.fingerprint
+    without_assumptions = Digest::SHA256.hexdigest(JSON.generate([original.jobs, original.ignore, original.full_on]))
+    assert_equal without_assumptions, original.fingerprint
+    refute_equal original.fingerprint, config("assume" => ["constant_reachability"]).fingerprint
+  end
+
+  def test_unknown_assumption_is_rejected
+    [["anything"], "constant_reachability", [1]].each do |assume|
+      error = assert_raises(Sukashi::Error) { config("assume" => assume) }
+      assert_match(/assume must list known assumptions/, error.message)
+    end
   end
 end
