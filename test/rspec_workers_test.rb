@@ -76,6 +76,32 @@ class RSpecWorkersTest < Minitest::Test
     end
   end
 
+  def test_selected_run_preserves_history_for_only_failures
+    File.write("history_config.rb", <<~RUBY)
+      RSpec.configure { |config| config.example_status_persistence_file_path = "example_status.txt" }
+    RUBY
+    command = [RbConfig.ruby, "-S", "rspec", "--require", "./history_config.rb", "spec"]
+    job = { "runner" => "rspec", "command" => command }
+    paths = Dir["spec/*_spec.rb"]
+    paths.each { |path| File.write(path, File.read(path).sub("eq(true)", "eq(false)")) }
+    failures = Sukashi::Runner.new(job, 123).invoke.failures
+    assert_equal 2, failures.size
+    paths.each { |path| File.write(path, File.read(path).sub("eq(false)", "eq(true)")) }
+
+    runner = Sukashi::Runner.new(job.merge("command" => command + ["--only-failures"]), 123)
+    history = File.read("example_status.txt")
+    assert_equal failures, runner.invoke(discover: true).ids
+    selected = runner.invoke(ids: [failures.first])
+    assert selected.ok
+    assert_equal [failures.first], selected.ids
+    assert_equal history, File.read("example_status.txt")
+
+    full = runner.invoke
+    assert full.ok
+    assert_equal failures, full.ids
+    assert_empty runner.invoke(discover: true).ids
+  end
+
   def test_abnormal_worker_exit_is_not_success
     File.write("spec/second_spec.rb", "RSpec.describe('second') { it('exits') { exit! 3 } }")
     result = runner.invoke
