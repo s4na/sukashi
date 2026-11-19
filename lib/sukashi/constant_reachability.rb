@@ -16,8 +16,9 @@ module Sukashi
   #   - the files defining the superclass of a class in U (STI, descendants),
   #     unless that superclass declares `self.abstract_class = true`,
   #   - every file that issues HTTP requests or visits, once U contains a
-  #     controller or config/routes.rb (requests reach controllers through
-  #     routing, not by naming them).
+  #     controller, a view helper or config/routes.rb (requests reach
+  #     controllers through routing and templates call helpers by method
+  #     name, not by naming them).
   #
   # Anything the assumption cannot bound makes #closure return nil, and the
   # caller keeps the existing per-test analysis. See docs/selection-safety.md.
@@ -80,7 +81,7 @@ module Sukashi
         current = queue.shift
         @index.users_of(current).each(&push)
         facts = @facts[current]
-        pull_http.call if current == ROUTES || controller?(current, facts)
+        pull_http.call if current == ROUTES || http_surface?(current, facts)
         next unless facts
         facts.classes.each { |name, _| segments.merge(name.split("::")) }
         # Application code does not name or instantiate test classes.
@@ -131,8 +132,10 @@ module Sukashi
       nil
     end
 
-    def controller?(path, facts)
-      path.start_with?("app/controllers/") || facts&.classes&.any? { |name, _| name.end_with?("Controller") }
+    # Controllers and view helpers: reached through requests and templates.
+    def http_surface?(path, facts)
+      path.start_with?("app/controllers/", "app/helpers/") ||
+        facts&.classes&.any? { |name, _| name.end_with?("Controller", "Helper") }
     end
 
     def external?(root)

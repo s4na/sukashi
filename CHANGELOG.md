@@ -4,7 +4,7 @@ Changes to the CLI and its JSON reports are recorded here. The installed version
 
 ## Unreleased
 
-- Add the opt-in `assume: [constant_reachability]` setting, which excludes test files outside the escape closure of the change with the `unreachable_change` reason. Controllers, routes and templates in the closure keep HTTP-issuing tests as candidates instead of disabling the assumption, and the plan's `assumptions` entry (plan schema minor 2) records whether it was applied and why not.
+- Add the opt-in `assume: [constant_reachability]` setting, which excludes test files outside the escape closure of the change with the `unreachable_change` reason. Controllers, view helpers, routes and templates in the closure keep HTTP-issuing tests as candidates instead of disabling the assumption, and the plan's `assumptions` entry (plan schema minor 2) records whether it was applied and why not.
 - Add English installation, usage, configuration, and limitations documentation.
 - Add package description, changelog and issue-tracker links, and RubyGems MFA metadata.
 - Include the English README and changelog in the gem package.

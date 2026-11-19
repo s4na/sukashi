@@ -445,9 +445,14 @@ class SelectionTest < Minitest::Test
     rspec = plan.dig("jobs", "rspec")
     minitest = plan.dig("jobs", "minitest")
     assert_equal ["./spec/models/discount_spec.rb[1:1]"], rspec.fetch("selected").keys
-    assert_equal ["DiscountTest#test_member"], minitest.fetch("selected").keys
+    # Tests with a custom runner protocol stay selected before any exclusion.
+    assert_equal ["DiscountTest#test_member", RACK_REQUEST, RECEIPT_SYSTEM].sort, minitest.fetch("selected").keys
+    assert_equal(%w[custom_test_protocol custom_test_protocol],
+                 [RACK_REQUEST, RECEIPT_SYSTEM].map { |id| minitest.dig("selected_details", id, "code") })
+    assert_equal 4, rspec.fetch("excluded").size
     [rspec, minitest].each do |job|
-      assert_equal 4, job.fetch("excluded").size
+      refute_empty job.fetch("excluded")
+      assert_equal job.fetch("inventory").size, job.fetch("selected").size + job.fetch("excluded").size
       assert(job.fetch("excluded_details").values.all? { |d| d.fetch("code") == "unreachable_change" })
     end
 

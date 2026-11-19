@@ -35,9 +35,9 @@ class ConstantReachabilityTest < Minitest::Test
   end
 
   def test_name_strings_and_plural_symbols_join_the_closure
-    reach = closure("app/models/other.rb" => "class Other; has_many :coupons; def self.run; 1; end; end")
+    reach = closure({ "app/models/other.rb" => "class Other; has_many :coupons; def self.run; 1; end; end" })
     assert_includes reach, "test/other_test.rb"
-    reach = closure("app/models/other.rb" => "class Other; def self.run; 'Coupon'; end; end")
+    reach = closure({ "app/models/other.rb" => "class Other; def self.run; 'Coupon'; end; end" })
     assert_includes reach, "test/other_test.rb"
   end
 
@@ -65,7 +65,7 @@ class ConstantReachabilityTest < Minitest::Test
     assert_escapes({ "app/models/other.rb" => "class Other; def self.run(t); Object.const_get(t); end; end" }, /reflective/)
     assert_escapes({ "app/models/other.rb" => "class Other; def self.run(m, a); send(m, a); end; end" }, /reflective/)
     assert_escapes({ "app/models/other.rb" => "class Other; def self.run; Base.descendants; end; end" }, /reflective/)
-    refute_nil closure("app/models/other.rb" => "class Other; def self.run; 'Other'.constantize; send(:run); end; end")
+    refute_nil closure({ "app/models/other.rb" => "class Other; def self.run; 'Other'.constantize; send(:run); end; end" })
   end
 
   def test_load_time_effects_in_the_closure_escape
@@ -75,7 +75,7 @@ class ConstantReachabilityTest < Minitest::Test
     assert_escapes({ "app/models/coupon.rb" => "module Rails; class Coupon; end; end" }, /external namespace/,
                    external: Set["rails"])
     assert_escapes({ "lib/setup.rb" => "Coupon.rate(true)" }, /full_on/, shared: ->(path) { path == "lib/setup.rb" })
-    refute_nil closure("app/models/coupon.rb" => "class Coupon; RATES = [1].freeze; scope :x, -> { Clock.now }; end")
+    refute_nil closure({ "app/models/coupon.rb" => "class Coupon; RATES = [1].freeze; scope :x, -> { Clock.now }; end" })
   end
 
   def test_controllers_and_routes_bring_in_http_callers
@@ -91,6 +91,10 @@ class ConstantReachabilityTest < Minitest::Test
     reach = analysis(routes.merge(REQUEST), tests: tests).closure(["app/models/coupon.rb"])
     assert_includes reach, "config/routes.rb"
     assert_includes reach, "test/coupons_request_test.rb"
+
+    helper = { "app/helpers/coupons_helper.rb" => "module CouponsHelper; def r; Coupon.rate(true); end; end" }
+    assert_includes analysis(helper.merge(REQUEST), tests: tests).closure(["app/models/coupon.rb"]),
+                    "test/coupons_request_test.rb"
 
     subject = analysis(REQUEST, tests: tests)
     refute_includes subject.closure(["app/models/coupon.rb"]), "test/coupons_request_test.rb"
