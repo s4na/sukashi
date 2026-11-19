@@ -96,6 +96,9 @@ end
 # Attach after its own plugins have installed their reporters and filters.
 module SukashiMinitestPlugins
   def init_plugins(options)
+    if (dir = ENV["SUKASHI_REPORT_DIR"])
+      File.write(File.join(dir, "#{Process.pid}.json.started"), "")
+    end
     super
     SukashiMinitest.install(options)
   end

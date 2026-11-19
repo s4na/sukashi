@@ -56,7 +56,7 @@ module Sukashi
       # A full plan runs once; there is no second identical execution.
       full = runner.invoke(plain: kind == "command")
       opaque = full.rows.nil?
-      if opaque && kind != "command"
+      if opaque && (kind == "rspec" || (kind == "minitest" && full.ok))
         # Some wrappers do not accept instrumentation options (or run more than
         # one framework). Preserve the real job's verdict, including failures.
         original = runner.invoke(plain: true)

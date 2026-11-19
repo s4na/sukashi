@@ -96,19 +96,24 @@ module Sukashi
     def read_reports(dir)
       return read_rspec_reports(dir) if @job["runner"] == "rspec"
       files = Dir[File.join(dir, "*.json")]
-      return if files.empty?
+      started = Dir[File.join(dir, "*.json.started")].map { |file| file.delete_suffix(".started") }
+      return if files.empty? && started.empty?
+      raise InvalidReport, "Minitest worker report missing" unless (started - files).empty?
       rows = files.flat_map do |file|
         data = JSON.parse(File.read(file))
+        raise InvalidReport, "Minitest worker report malformed" unless data.is_a?(Array)
         data
       end
-      return unless rows.all? { |r| r.is_a?(Hash) && r["id"].is_a?(String) } && rows.map { |r| r["id"] }.uniq.size == rows.size
+      unless rows.all? { |r| r.is_a?(Hash) && r["id"].is_a?(String) } && rows.map { |r| r["id"] }.uniq.size == rows.size
+        raise InvalidReport, "Minitest worker report has invalid or duplicate IDs"
+      end
       rows.each do |row|
         next unless row["file"]
         row["file"] = Pathname.new(File.expand_path(row["file"])).relative_path_from(Pathname.pwd).to_s
       end
       rows
     rescue JSON::ParserError, KeyError, TypeError, ArgumentError
-      nil
+      raise InvalidReport, "Minitest worker report malformed"
     end
 
     def read_rspec_reports(dir)
