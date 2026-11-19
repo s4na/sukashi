@@ -111,6 +111,24 @@ Rake の既定タスクも test です。Lint の導入では全体のスタイ�
 
 [検証用Railsアプリとシナリオ一覧](fixtures/rails_app/README.md)
 
+## 全件だけで失敗したテストの再確認
+
+既定では従来どおり、テストの失敗や照合不一致で終了コード1になります。
+`--retry-full-only` を付けると、`full_only_failures` のIDを同じジョブ・seed・選択用アダプターで1回だけ再実行します。全件での実行順や外部状態までは再現できません。
+
+- `missed_failures`: 再実行でも失敗したID。選択漏れの**疑い**であり、原因確定ではありません。
+- `flaky_or_order_dependent`: 再実行ではpassedだったID。flakyと順序依存のどちらかは区別しません。
+- `unclassified_full_only_failures`: 再実行しなかった、ID不一致、計測不能、skipなどで判定できなかったID。
+- `selected_only_failures`: 選択実行でのみ失敗したID。再実行の分類とは別に残します。
+- `retry_ids` / `retry_seconds` / `retry_ok`: 再実行の観測結果。再実行なしはnull。
+
+```sh
+bundle exec sukashi check --base origin/main --retry-full-only
+```
+
+`--failure-policy missed --retry-full-only` は明示的な緩和です。全件プロセスが通常のテスト失敗コード1で終了し、全件失敗がすべてfull-onlyであり、その全IDが再実行でpassed、再実行プロセスも成功、選択実行成功、ID照合一致の場合だけ成功を許可します。選択実行の失敗、未分類、計測不能、起動不能、シグナル終了、終了コード1以外の失敗は成功にしません。ただし終了コード1にまとめられたテスト外のcleanupエラーまでは判別できません。この緩和を合否判定に使う場合は、その制約を受け入れる必要があります。元の `full_failures` / `full_only_failures` は変更しません。厳密なCIの合否には既定の `strict` を使用してください。再実行には追加のCI時間と副作用があるため、テストが再実行可能な環境でのみ有効にしてください。
+
+
 ## 参考元とライセンス
 
 Sukashi は [GitLab 版 Crystalball](https://gitlab.com/gitlab-org/ruby/gems/crystalball) と [GitLab での導入](https://gitlab.com/gitlab-org/gitlab/-/merge_requests/44968) を参考にしています。Crystalball の実行時カバレッジによる対応表とは異なり、現在の Sukashi は Prism による静的解析で候補を選び、全件実行と照合します。Crystalball を gem の依存には含めていません。

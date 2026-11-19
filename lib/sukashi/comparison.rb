@@ -1,9 +1,14 @@
 require_relative "planner"
+require_relative "failure_diagnosis"
+require_relative "repository"
 
 module Sukashi
   class Comparison
-    def initialize(repo, config, plan)
+    def initialize(repo, config, plan, retry_full_only: false, failure_policy: "strict")
+      raise Error, "unknown failure policy: #{failure_policy}" unless %w[strict missed].include?(failure_policy)
+      raise Error, "missed policy requires retry_full_only" if failure_policy == "missed" && !retry_full_only
       @repo, @config, @plan = repo, config, plan
+      @retry_full_only, @failure_policy = retry_full_only, failure_policy
     end
 
     def run
@@ -24,7 +29,7 @@ module Sukashi
         end
         [name, compare(runner, decision, job["runner"])]
       end
-      { "head" => @repo.revision("HEAD"), "seed" => seed, "plan_seconds" => @plan["plan_seconds"], "jobs" => reports, "ok" => reports.values.all? { |r| r["ok"] } }
+      { "failure_policy" => @failure_policy, "head" => @repo.revision("HEAD"), "seed" => seed, "plan_seconds" => @plan["plan_seconds"], "jobs" => reports, "ok" => reports.values.all? { |r| r["ok"] } }
     end
 
     private
@@ -61,6 +66,12 @@ module Sukashi
         []
       end
       drift = (subset && sample.ids != ids) || (inventory && !opaque && full.ids != inventory) || (subset && opaque)
+      diagnosis = FailureDiagnosis.new(runner).call(missing, enabled: @retry_full_only && kind != "command")
+      strict_ok = full.ok && !drift && (!subset || sample.ok) && missing.empty?
+      # Relax only a fully observed set of failures that all passed on retry.
+      explained = full.exit_status == 1 && !missing.empty? && !opaque && full.failures == missing &&
+        diagnosis["flaky_or_order_dependent"] == missing && diagnosis["retry_ok"]
+      ok = strict_ok || (@failure_policy == "missed" && !drift && (!subset || sample.ok) && explained)
       {
         "mode" => subset ? "subset" : (decision["mode"] == "skip" ? "skip" : "full"),
         "reason" => decision["reason"], "selected_ids" => ids, "executed_ids" => sample&.ids,
@@ -69,8 +80,9 @@ module Sukashi
         "inventory_drift" => !!drift, "full_only_job" => opaque,
         "selected_seconds" => sample&.seconds, "full_seconds" => full.seconds,
         "selected_status" => sample&.status, "full_status" => full.status,
-        "ok" => full.ok && !drift && (!subset || sample.ok) && missing.empty?
-      }
+        "selected_only_failures" => sample ? sample.failures - full.failures : [],
+        "ok" => !!ok
+      }.merge(diagnosis)
     end
   end
 end

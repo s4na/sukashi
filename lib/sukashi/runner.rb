@@ -4,7 +4,7 @@ require "pathname"
 require_relative "diagnostics"
 
 module Sukashi
-  Result = Struct.new(:ok, :rows, :seconds, :status, :runtime_identity, keyword_init: true) do
+  Result = Struct.new(:ok, :rows, :seconds, :status, :runtime_identity, :exit_status, keyword_init: true) do
     def ids
       rows&.map { |r| r.fetch("id") }&.sort
     end
@@ -54,10 +54,11 @@ module Sukashi
         end
         Diagnostics.command(command)
         ok = system(env, [command.first, command.first], *command.drop(1), out: :err)
+        exit_status = $?.exitstatus
         rows = read_reports(dir) unless plain
         ok &&= !rows.any? { |row| row["status"] == "failed" } if rows && @job["runner"] == "rspec"
         Result.new(ok: !!ok, rows: rows, status: ok.nil? ? "failed_to_start" : (ok ? "passed" : "failed"),
-                   runtime_identity: discover ? read_runtime_identity(dir) : nil,
+                   runtime_identity: discover ? read_runtime_identity(dir) : nil, exit_status: exit_status,
                    seconds: (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(3))
       end
     rescue InvalidReport => e
