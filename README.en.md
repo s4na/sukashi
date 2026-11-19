@@ -42,7 +42,7 @@ bundle exec sukashi run --plan plan.json > comparison.json
 
 JSON goes to stdout; test logs go to stderr. `full_only_failures` lists IDs that failed only in the full run. `inventory_drift` reports mismatches between discovered, selected, and executed IDs. Test failures or comparison mismatches return exit code 1; configuration and pre-execution input errors return 2.
 
-`file_level_count` lets you compare individual test selection with selecting entire test files. Timing is reported separately as `plan_seconds`, `selected_seconds`, and `full_seconds`.
+`file_level_count` lets you compare individual test selection with selecting entire test files. Timing is reported separately as `plan_seconds`, per-job `rediscovery_seconds` (null when not attempted), `selected_seconds`, and `full_seconds`.
 
 ## Configure existing test jobs
 
