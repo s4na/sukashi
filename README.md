@@ -141,7 +141,7 @@ bundle exec sukashi check --base origin/main --retry-full-only
 
 ## JSONの互換性
 
-plan と comparison report は `version`（メジャー）と `schema_minor`（マイナー）を持ちます。現在は 1.1 です。キー・理由コードの追加はマイナー、既存キーの削除・型や意味の変更はメジャーを更新します。利用側は未知のキー・理由コードを許容してください。既存の理由文字列は残し、集計には `reason_detail.code`、`selected_details`、`excluded_details` を使います。
+plan と comparison report は `version`（メジャー）と `schema_minor`（マイナー）を持ちます。両者のマイナーバージョンは個別に更新します。受け取った JSON の `version` と `schema_minor` で版を確認してください。現行の各バージョンは下記の JSON 契約に記載しています。キー・理由コードの追加はマイナー、既存キーの削除・型や意味の変更はメジャーを更新します。利用側は未知のキー・理由コードを許容してください。既存の理由文字列は残し、集計には `reason_detail.code`、`selected_details`、`excluded_details` を使います。
 
 [JSON契約と理由コード](docs/json-contract.md) · [plan schema](schema/plan.v1.json) · [report schema](schema/report.v1.json)
 
