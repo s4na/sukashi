@@ -13,12 +13,27 @@ module Sukashi
         @config.jobs.keys.sort == @plan["jobs"].keys.sort && @plan["jobs"].values.all? { |v| v.is_a?(Hash) }
       reports = @config.jobs.to_h do |name, job|
         decision = valid ? @plan["jobs"][name] : { "mode" => "full", "reason" => "stale or invalid plan" }
-        [name, compare(Runner.new(job, seed), decision, job["runner"])]
+        runner = Runner.new(job, seed)
+        if valid && decision["mode"] != "full"
+          saved = @plan["runtime"].is_a?(Hash) ? @plan["runtime"][name] : nil
+          current = runner.invoke(discover: true) if verified_runtime?(saved)
+          unless current && current.ok && verified_runtime?(current.runtime_identity) && saved == current.runtime_identity &&
+                 decision["inventory"].is_a?(Array) && current.ids == decision["inventory"]
+            decision = { "mode" => "full", "reason" => "runtime identity changed or unavailable" }
+          end
+        end
+        [name, compare(runner, decision, job["runner"])]
       end
       { "head" => @repo.revision("HEAD"), "seed" => seed, "plan_seconds" => @plan["plan_seconds"], "jobs" => reports, "ok" => reports.values.all? { |r| r["ok"] } }
     end
 
     private
+
+    def verified_runtime?(identity)
+      identity.is_a?(Hash) && identity["status"] == "verified" &&
+        identity["fingerprints"].is_a?(Array) && !identity["fingerprints"].empty? &&
+        identity["fingerprints"].all? { |value| value.is_a?(String) && value.match?(/\A[0-9a-f]{64}\z/) }
+    end
 
     def compare(runner, decision, kind)
       inventory = decision["inventory"]
@@ -53,6 +68,7 @@ module Sukashi
         "selected_failures" => sample&.failures, "full_only_failures" => missing,
         "inventory_drift" => !!drift, "full_only_job" => opaque,
         "selected_seconds" => sample&.seconds, "full_seconds" => full.seconds,
+        "selected_status" => sample&.status, "full_status" => full.status,
         "ok" => full.ok && !drift && (!subset || sample.ok) && missing.empty?
       }
     end

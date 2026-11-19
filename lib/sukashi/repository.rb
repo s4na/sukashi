@@ -1,13 +1,18 @@
 require "open3"
+require_relative "diagnostics"
 
 module Sukashi
   class Error < StandardError; end
 
   class Repository
     def git(*args)
-      output, status = Open3.capture2("git", *args, err: File::NULL)
-      raise Error, "git #{args.first} failed" unless status.success?
+      raise Error, "git arguments must not contain NUL bytes" if args.any? { |arg| arg.include?("\0") }
+      Diagnostics.command(["git", *args])
+      output, stderr, status = Open3.capture3("git", *args)
+      raise Error, "git #{args.first} failed (exit #{status.exitstatus}): #{stderr.strip}" unless status.success?
       output
+    rescue SystemCallError => e
+      raise Error, "cannot start git: #{e.message}"
     end
 
     def revision(ref)
@@ -16,7 +21,8 @@ module Sukashi
 
     def merge_base(base, head)
       git("merge-base", revision(base), head).strip
-    rescue Error
+    rescue Error => e
+      warn "sukashi: #{e.message}; falling back to full jobs"
       nil
     end
 
@@ -48,6 +54,7 @@ module Sukashi
         mode, type, oid = info.split
         [path, oid] if path.end_with?(".rb", ".ru") && type == "blob" && mode.start_with?("100")
       end
+      Diagnostics.command(["git", "cat-file", "--batch"])
       IO.popen(["git", "cat-file", "--batch"], "r+b") do |io|
         paths.to_h do |path, oid|
           io.puts(oid)

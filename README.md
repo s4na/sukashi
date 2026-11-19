@@ -1,5 +1,7 @@
 # sukashi
 
+[English](README.en.md)
+
 PrismでPRの変更分岐からRSpecのexampleとMinitestのテストメソッドを選び、同じコミット・seedで全件実行と照合するRuby CLIです。Railsのrequest spec、system spec、通常のRubyの単体テストを含め、設定した全ジョブが対象です。[選択アルゴリズムの設計](docs/test-selection.md)
 
 ## インストール
@@ -77,10 +79,42 @@ glob は Ruby の `File.fnmatch?`（`FNM_PATHNAME | FNM_DOTMATCH`）で評価し
 
 設定変更は plan の fingerprint に反映されます。この変更前に作った plan も不一致になり、既存の仕組みで全件実行に戻ります。
 
+## 保存した plan と実行環境
+
+保存した plan の subset / skip を再利用する前に、同じジョブ・seedで列挙をもう一度実行し、実際のRuby子プロセスから得た環境の識別情報を照合します。head・設定が同じでも、環境や列挙したテストIDが違う、古いplanに情報がない、列挙や取得が失敗した場合は、そのジョブを全件実行へ戻します。全件のplanにはこの再列挙を追加しません。
+
+識別情報には有効なGemfile/lockの場所と内容、Ruby、Bundlerの解決済みgem名・版・platform、Sukashiのコード、Bundler/Rubyの起動に関わる環境設定を使います。planの `runtime` に保存するのはハッシュ値と固定の理由だけです。絶対パス、環境変数の値、Gemfileの本文は保存しません。
+
+現在はBundlerとlockfileを確認できる環境が対象です。通常のgemの識別は解決された版を信頼し、インストール済みgemファイルの手動改変までは検出しません。外部ラッパーやRUBYOPTで読み込むファイルの内容も検証対象外です。それらを変更する運用では保存済みplanを再利用せず、全件実行を維持してください。path/git gemは版だけでは内容を確認できないため `opaque` とし、全件に戻します。ただし実行中のSukashi自身はコードをハッシュ化して照合します。外部gemを自動解析したり、起動時パッチの安全性を保証したりする機能ではありません。
+
+同じheadの外部path gem編集を見逃してsubsetを再利用しないための保守的な制約です。理由は `runtime identity unavailable` または `runtime identity changed or unavailable` に出ます。`runner: command` や列挙できないラッパーも全件扱いです。再列挙にはアプリ起動の時間と副作用が加わります。確認後の外部ファイル変更との競合を防ぐため、CIでは実行中の依存と環境を固定してください。
+
+## エラーの診断
+
+入力・設定エラーは終了コード2、予期しない内部エラーはバックトレース付きで3を返します。`--verbose` または `SUKASHI_DEBUG=1` でコマンド・詳細をstderrへ出せます。レポートの `full_status` / `selected_status` は実行失敗と起動失敗を区別します。[診断出力と注意点](docs/diagnostics.md)
+
 ## 選択の範囲
 
 初版は、真偽値の仮引数を直接調べるクラスメソッドの `if ... else ... end` で、片側のリテラルなどの変更を識別します。リテラル引数を直接渡すテストや、URLを文字列リテラルで指定したRailsルート → action → クラスメソッドの経路なら反対側だけを通るテストを省けます。controllerの応答を追えるのは単純な `render plain:` までです。アプリで設定したRack middlewareがあるHTTP経路、暗黙の描画、テンプレート・layoutの描画、prepend等によるメソッドの差し替えは未解決として残します。条件の変更、移動・削除などは両版のファイル依存に広げます。動的な呼び出し・共有setupは候補に残し、parse失敗、未分類の変更、比較元の欠落などでは全件実行に戻ります。RSpecグループ内の `let` や `before` は、そのファイルと利用元を候補に残します。controllerの `before_action` は、そのcontrollerや継承先を通る経路に影響します。共通helperの `fixtures :all` や `config.before` のように帰属を限定できないフックがある場合は、全件に戻るため削減できません。全件照合で失敗を再現できることが、選択漏れを検出する条件です。
 
-開発時の検証は `bundle install` の後、`bundle exec ruby -Itest -e 'Dir["test/*_test.rb"].sort.each { |f| require_relative f }'` で実行します。
+## 開発と公開 API
+
+動作確認は AGENTS.md に従い GitHub Actions 上でのみ実行します。
+Tests ワークフローの `test` は `bundle exec rake test`、
+`ruby-lint` は独立した lint bundle で `bundle exec rubocop --lint` を実行します。
+Rake の既定タスクも test です。Lint の導入では全体のスタイル変更は行いません。
+
+`require "sukashi"` は各コンポーネントを明示的に読み込み、コマンドを実行しません。
+公開する Ruby API は `Sukashi::CLI.call(argv)` です。引数配列は処理中に変更され、
+戻り値は CLI の終了コードです。Planner、Comparison、Repository などは内部実装として扱い、
+互換性を保証する API には含めません。
 
 [検証用Railsアプリとシナリオ一覧](fixtures/rails_app/README.md)
+
+## 参考元とライセンス
+
+Sukashi は [GitLab 版 Crystalball](https://gitlab.com/gitlab-org/ruby/gems/crystalball) と [GitLab での導入](https://gitlab.com/gitlab-org/gitlab/-/merge_requests/44968) を参考にしています。Crystalball の実行時カバレッジによる対応表とは異なり、現在の Sukashi は Prism による静的解析で候補を選び、全件実行と照合します。Crystalball を gem の依存には含めていません。
+
+Sukashi 自体は [MIT ライセンス](LICENSE)です。GitLab 版 Crystalball のライセンスと著作権表示は [上流の LICENSE](https://gitlab.com/gitlab-org/ruby/gems/crystalball/-/blob/main/LICENSE) を参照してください。今後、上流のコードや文章を取り込む場合は、該当する著作権表示とライセンスを保持し、取り込んだファイルとリビジョンを記録します。
+
+[RSpec の複数プロセスジョブの条件](docs/rspec-workers.md)

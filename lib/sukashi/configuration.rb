@@ -15,9 +15,13 @@ module Sukashi
     attr_reader :jobs, :ignore, :full_on
 
     def initialize(path)
-      raw = path && YAML.safe_load_file(path)
+      raw = begin
+        path && YAML.safe_load_file(path)
+      rescue Psych::Exception, SystemCallError => e
+        raise Error, "cannot read configuration #{path}: #{e.message}"
+      end
       raise Error, "configuration must contain jobs" if path && !raw.is_a?(Hash)
-      @jobs = raw ? raw.fetch("jobs") : defaults
+      @jobs = raw ? raw["jobs"] : defaults
       @ignore = raw ? raw.fetch("ignore", []) : []
       raise Error, "ignore must contain path patterns" unless strings?(@ignore)
       additions = raw ? raw.fetch("full_on", []) : []
@@ -28,7 +32,7 @@ module Sukashi
       raise Error, "configure at least one test job" unless jobs.is_a?(Hash) && !jobs.empty?
       jobs.each do |name, job|
         unless name.is_a?(String) && job.is_a?(Hash) && %w[rspec minitest command].include?(job["runner"]) &&
-               strings?(job["command"]) && !job["command"].empty? && !job["command"].first.empty?
+               strings?(job["command"]) && job["command"].none? { |arg| arg.include?("\0") } && !job["command"].empty? && !job["command"].first.empty?
           raise Error, "invalid test job #{name.inspect}"
         end
       end

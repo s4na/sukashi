@@ -9,14 +9,18 @@ module Sukashi
 
     def plan
       started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      jobs = @config.jobs.transform_values do |job|
+      runtimes = {}
+      jobs = @config.jobs.to_h do |name, job|
         inventory = Runner.new(job, @seed).invoke(discover: true)
-        inventory.ok ? inventory.rows : nil
+        runtimes[name] = inventory.ok ? inventory.runtime_identity : nil
+        [name, inventory.ok ? inventory.rows : nil]
       end
       @test_paths = jobs.values.compact.flatten.filter_map { |r| r["file"] }.to_set
       reason = prepare
       decisions = jobs.to_h do |name, rows|
-        decision = if reason == :skip
+        decision = if runtimes.dig(name, "status") != "verified"
+          { "mode" => "full", "reason" => "runtime identity unavailable" }
+        elsif reason == :skip
           { "mode" => "skip", "reason" => "no executable changes" }
         elsif reason || !rows || rows.empty?
           { "mode" => "full", "reason" => reason || "job inventory unavailable or empty" }
@@ -26,7 +30,7 @@ module Sukashi
         [name, decision.merge("inventory" => rows&.map { |r| r["id"] }&.sort)]
       end
       { "version" => 1, "base" => @base, "head" => @head, "config" => @config.fingerprint,
-        "seed" => @seed, "jobs" => decisions,
+        "seed" => @seed, "jobs" => decisions, "runtime" => runtimes,
         "plan_seconds" => (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(3) }
     end
 
