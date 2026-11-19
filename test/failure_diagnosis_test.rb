@@ -89,8 +89,8 @@ class FailureDiagnosisTest < Minitest::Test
   end
 
   def test_policy_requires_retry_and_rejects_unknown_values
-    assert_raises(ArgumentError) { Sukashi::Comparison.new(nil, nil, {}, failure_policy: "missed") }
-    assert_raises(ArgumentError) { Sukashi::Comparison.new(nil, nil, {}, failure_policy: "ignore") }
+    assert_raises(Sukashi::Error) { Sukashi::Comparison.new(nil, nil, {}, failure_policy: "missed") }
+    assert_raises(Sukashi::Error) { Sukashi::Comparison.new(nil, nil, {}, failure_policy: "ignore") }
   end
 
   def test_mixed_retry_results_keep_unclassified_ids

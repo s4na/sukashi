@@ -2,6 +2,7 @@
 require "json"
 require "minitest"
 require_relative "../test_helpers"
+require_relative "../runtime_identity" if ENV["SUKASHI_RUNTIME_DIR"]
 
 module SukashiMinitest
   def self.write(rows)
