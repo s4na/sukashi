@@ -85,7 +85,6 @@ class ConstantReachabilityTest < Minitest::Test
     reach = subject.closure(["app/models/coupon.rb"])
     assert_includes reach, "test/coupons_request_test.rb"
     refute_includes reach, "test/other_test.rb"
-    assert subject.http?
 
     routes = { "config/routes.rb" => "Rails.application.routes.draw { resources :coupons }" }
     reach = analysis(routes.merge(REQUEST), tests: tests).closure(["app/models/coupon.rb"])
@@ -98,8 +97,6 @@ class ConstantReachabilityTest < Minitest::Test
 
     subject = analysis(REQUEST, tests: tests)
     refute_includes subject.closure(["app/models/coupon.rb"]), "test/coupons_request_test.rb"
-    refute subject.http?
-    assert_includes subject.closure(["app/models/coupon.rb"], http: true), "test/coupons_request_test.rb"
   end
 
   def test_shared_hooks_in_the_closure_escape

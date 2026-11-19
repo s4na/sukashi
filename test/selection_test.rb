@@ -467,6 +467,24 @@ class SelectionTest < Minitest::Test
     outcome = named.dig("assumptions", "constant_reachability")
     refute outcome.fetch("applied")
     assert_equal "base: non-Ruby file names a changed class: docs/pricing.md", outcome.fetch("reason")
+
+    cmd("git", "mv", "docs/pricing.md", "app/views/orders/discount.html.erb")
+    write("app/views/orders/discount.html.erb", "<%= Discount.rate(true) %>")
+    write("spec/views/discount_spec.rb", <<~RUBY)
+      require_relative "../rails_helper"
+      RSpec.describe "orders/discount", type: :view do
+        it("renders the rate") { render; expect(rendered).to eq("30") }
+      end
+    RUBY
+    commit("exercise the template from a view spec")
+    base = cmd("git", "rev-parse", "HEAD")
+    replace("app/models/discount.rb", "30", "40")
+    commit("change the rendered rate")
+    view_plan = cli("plan", "--base", base, "--config", "assume.yml")
+    outcome = view_plan.fetch("assumptions").fetch("constant_reachability")
+    refute outcome.fetch("applied")
+    assert_equal "base: non-Ruby file names a changed class: app/views/orders/discount.html.erb", outcome.fetch("reason")
+    assert_equal "full", view_plan.dig("jobs", "rspec", "mode")
   end
 
   def test_predicate_change_runs_all_tests

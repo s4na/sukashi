@@ -124,16 +124,10 @@ module Sukashi
       closures = [[@old, @base, "base", changes.map(&:first)], [@new, @head, "head", changes.map(&:last)]].map do |index, rev, side, paths|
         analysis = ConstantReachability.new(index, @test_paths, shared: method(:shared?), external: external)
         reach = analysis.closure(paths.compact)
-        loop do
-          return assumption_skipped("#{side}: #{analysis.escape}") unless reach
-          named = @repo.grep_other_files(rev, analysis.forms.to_a)
-          # Templates are rendered only through requests: cover them with every HTTP caller.
-          templates, others = named.partition { |path| path.start_with?("app/views/") }
-          blocking = others.find { |path| shared?(path) || !ignored?(path) }
-          return assumption_skipped("#{side}: non-Ruby file names a changed class: #{blocking}") if blocking
-          break if templates.empty? || analysis.http?
-          reach = analysis.closure(paths.compact, http: true)
-        end
+        return assumption_skipped("#{side}: #{analysis.escape}") unless reach
+        named = @repo.grep_other_files(rev, analysis.forms.to_a)
+        blocking = named.find { |path| shared?(path) || !ignored?(path) }
+        return assumption_skipped("#{side}: non-Ruby file names a changed class: #{blocking}") if blocking
         reach
       end
       @assumptions["constant_reachability"] = { "applied" => true }

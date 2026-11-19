@@ -33,7 +33,6 @@
 - U で定義するクラス・モジュールの名前の形（CamelCase、snake_case、末尾語の複数形を含む接頭辞、不規則複数形）を文字列・シンボルリテラルに含む Ruby ファイル。テストファイルが定義するクラスは対象外。
 - U のクラスのスーパークラスを定義するファイル（STI や `find` で派生クラスが返るため）。`self.abstract_class = true` を宣言するクラスは除く。
 - U にコントローラー・ビューヘルパー（`app/controllers/`・`app/helpers/` 配下か、名前が `Controller`・`Helper` で終わるクラス・モジュール）か `config/routes.rb` が入ったら、HTTP リクエスト・`visit` を発行するすべてのファイル。リクエストはルーティングを経てコントローラーに届き、テンプレートはヘルパーをメソッド名で呼ぶため、名前を書かずに到達する。URL の解決可否にかかわらずまとめて加える。
-- `app/views/` のテンプレートが名前の形を含む場合も、同じく HTTP を発行するすべてのファイルを加える（テンプレートはリクエスト経由でしか描画されないため）。
 
 旧版の U にも新版の U にも入らないテストファイルの例を `unreachable_change` で除外する。変更されたテスト、カスタムプロトコルは従来どおり先に選ぶ。U の中のテストは従来の解析で判定する。
 
@@ -43,7 +42,7 @@
 - U に共有 hook（テスト以外の hook と `config.before` などのスコープ外 hook）、`full_on` に一致するパス（`config/routes.rb` を除く）、グローバル変数への代入がある。HTTP を発行するファイルが support など `full_on` 側にあれば、ここで使わない側に倒れる。
 - U のファイルが読み込み時（メソッド・lambda・遅延ブロックの外）に、U で定義していない定数や動的な receiver のメソッドを呼ぶ。`RSpec`・`FactoryBot`・`Struct` など状態を保持しない一部の定数は除く。
 - U がコアや Gemfile.lock の gem 名と同じ最上位名前空間を再オープンする。
-- `ignore` に一致しない Ruby 以外の追跡ファイル（`app/views/` 以外の fixture YAML、アセット、ドキュメントなど）に名前の形が現れる。
+- `ignore` に一致しない Ruby 以外の追跡ファイル（fixture YAML、アセット、ドキュメントなど）に名前の形が現れる。`app/views/` のテンプレートは view spec や mailer からも描画されるため、名前の形が現れれば `ignore` にかかわらず仮定を使わない。
 
 plan の `assumptions.constant_reachability` に、仮定を使ったか（`applied`）と、使わなかった場合の理由（`reason`、例: `head: reflective lookup in app/models/x.rb`）を出す。shadow 計測では、この理由の分布で仮定が効かない原因を集計する。
 
