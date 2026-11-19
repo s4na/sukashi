@@ -252,6 +252,21 @@ class SelectionTest < Minitest::Test
     assert_includes report.dig("jobs", "minitest", "full_failures"), RACK_REQUEST
   end
 
+  def test_check_rejects_a_different_commit_before_discovery
+    write(".sukashi.yml", <<~YAML)
+      jobs:
+        suite:
+          runner: minitest
+          command: [ruby, -e, 'File.write("job-started", "yes")']
+    YAML
+    commit("configure a job that records startup")
+    out, err, status = Open3.capture3(CLI, "check", "--base", @base, "--head", @base, chdir: @root)
+    assert_equal 2, status.exitstatus
+    assert_empty out
+    assert_includes err, @base
+    refute File.exist?(File.join(@root, "job-started"))
+  end
+
   def test_full_command_runs_on_stale_plan_and_missing_history
     write(".sukashi.yml", <<~YAML)
       jobs:

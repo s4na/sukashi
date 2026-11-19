@@ -27,7 +27,7 @@ Git履歴を取得したリポジトリのルートで、テスト用のDBやブ
 bundle exec sukashi check --base origin/main --head HEAD --seed 1234 > comparison.json
 ```
 
-`--base` は比較先のrefまたはSHAです。CIではPR headそのものをcheckoutし、比較先とmerge-baseまでfetchします。GitHub Actionsなら `actions/checkout` の `ref` に `github.event.pull_request.head.sha`、`fetch-depth` に `0`、CLIの `--base` に `github.event.pull_request.base.sha` を指定できます。
+`--base` は比較先のrefまたはSHAです。`check` は `--head` と checkout のコミットが一致しなければ、列挙前に終了コード2を返します。CIではPR headそのものをcheckoutし、比較先とmerge-baseまでfetchします。GitHub Actionsなら `actions/checkout` の `ref` に `github.event.pull_request.head.sha`、`fetch-depth` に `0`、CLIの `--base` に `github.event.pull_request.base.sha` を指定できます。
 
 選択理由や、変更された腕からたどれるテストIDを確認するには、planを保存して同じcheckoutで実行します。
 

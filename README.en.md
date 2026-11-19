@@ -27,7 +27,7 @@ Run from the repository root, with Git history and the same databases, browsers,
 bundle exec sukashi check --base origin/main --head HEAD --seed 1234 > comparison.json
 ```
 
-`--base` accepts a ref or commit SHA. In pull-request CI, check out the actual PR head and fetch the base and merge-base history. With GitHub Actions, use `github.event.pull_request.head.sha` as the checkout ref, `fetch-depth: 0`, and `github.event.pull_request.base.sha` for `--base`.
+`--base` accepts a ref or commit SHA. If `--head` resolves to a different commit from the checkout, `check` exits with code 2 before discovery. In pull-request CI, check out the actual PR head and fetch the base and merge-base history. With GitHub Actions, use `github.event.pull_request.head.sha` as the checkout ref, `fetch-depth: 0`, and `github.event.pull_request.base.sha` for `--base`.
 
 To inspect selection reasons before execution, save a plan and run it from the same checkout:
 

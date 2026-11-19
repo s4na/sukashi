@@ -53,6 +53,9 @@ module Sukashi
       else
         raise Error, "--base is required" unless options[:base]
         head = repo.revision(options[:head])
+        if command == "check" && head != repo.revision("HEAD")
+          raise Error, "requested --head #{head} does not match the checked-out HEAD"
+        end
         plan = Planner.new(repo, config, head, repo.merge_base(options[:base], head), options[:seed]).plan
       end
       if command == "plan"
