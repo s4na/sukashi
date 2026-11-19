@@ -234,7 +234,7 @@ module Sukashi
       when Prism::ConstantReadNode, Prism::ConstantPathNode
         @references[path] << node.name.to_s
       end
-      node.each_child_node { |child| scan(child, path, owner, in_example_group) }
+      node.compact_child_nodes.each { |child| scan(child, path, owner, in_example_group) }
     end
   end
 
