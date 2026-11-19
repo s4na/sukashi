@@ -60,8 +60,7 @@ module Sukashi
       end
     end
 
-    # http: start with every HTTP caller, for changes rendered by templates.
-    def closure(changed, http: false)
+    def closure(changed)
       return escape!("eval or computed constant name") if @index.opaque?
       return escape!("reflective lookup in #{@reflective.first}") unless @reflective.empty?
       reach = Set.new
@@ -69,19 +68,16 @@ module Sukashi
       push = ->(path) { queue << path if reach.add?(path) }
       segments = Set.new
       @forms = Set.new
-      @http = false
-      pull_http = lambda do
-        next if @http
-        @http = true
-        @index.http_callers.each(&push)
-      end
+      http_added = false
       changed.each(&push)
-      pull_http.call if http
       until queue.empty?
         current = queue.shift
         @index.users_of(current).each(&push)
         facts = @facts[current]
-        pull_http.call if current == ROUTES || http_surface?(current, facts)
+        if !http_added && (current == ROUTES || http_surface?(current, facts))
+          @index.http_callers.each(&push)
+          http_added = true
+        end
         next unless facts
         facts.classes.each { |name, _| segments.merge(name.split("::")) }
         # Application code does not name or instantiate test classes.
@@ -114,11 +110,6 @@ module Sukashi
         end
       end
       reach
-    end
-
-    # Whether the last closure pulled in every HTTP caller.
-    def http?
-      @http
     end
 
     def self.normalize(name)

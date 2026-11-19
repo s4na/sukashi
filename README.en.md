@@ -42,7 +42,7 @@ bundle exec sukashi run --plan plan.json > comparison.json
 
 JSON goes to stdout; test logs go to stderr. `full_only_failures` lists IDs that failed only in the full run. `inventory_drift` reports mismatches between discovered, selected, and executed IDs. Test failures or comparison mismatches return exit code 1; configuration and pre-execution input errors return 2.
 
-`file_level_count` lets you compare individual test selection with selecting entire test files. Timing is reported separately as `plan_seconds`, `selected_seconds`, and `full_seconds`.
+`file_level_count` lets you compare individual test selection with selecting entire test files. Timing is reported separately as `plan_seconds`, per-job `rediscovery_seconds` (null when not attempted), `selected_seconds`, and `full_seconds`.
 
 ## Configure existing test jobs
 
@@ -70,7 +70,7 @@ Commands are argument arrays, not shell strings. RSpec commands must accept RSpe
 
 `assume: [constant_reachability]` assumes that project code reaches a project class only by naming it in a constant, string, or symbol, or through a subclass relation. Starting from the changed files, Sukashi repeatedly adds files that refer to them, Ruby files whose literals contain a form of a defined class name, and superclass definitions. Test files outside that closure are excluded as `unreachable_change`, even when one shared hook would otherwise keep every test as a candidate.
 
-The assumption is not used, and normal analysis applies, when the repository contains `eval`, `constantize` or `const_get` on a computed name, `descendants`, `send` with a computed name and arguments, or `inflections`; when the closure contains shared hooks, `full_on` paths, global variable writes, load-time calls on outside constants, or reopened gem namespaces; or when a tracked non-Ruby file outside `ignore` contains a form of a class name. State passed between tests through databases or caches, objects stored elsewhere by method bodies, and gems that enumerate classes are outside the assumption. When the closure contains a controller, a view helper, or `config/routes.rb`, or a template under `app/views/` contains a class-name form, every test that issues HTTP requests stays a candidate. The plan's `assumptions` entry shows whether the assumption was applied and, if not, why. Verify its effect with the full-suite comparison before relying on it. See [selection-safety.md](docs/selection-safety.md).
+The assumption is not used, and normal analysis applies, when the repository contains `eval`, `constantize` or `const_get` on a computed name, `descendants`, `send` with a computed name and arguments, or `inflections`; when the closure contains shared hooks, `full_on` paths, global variable writes, load-time calls on outside constants, or reopened gem namespaces; or when a tracked non-Ruby file outside `ignore` contains a form of a class name. State passed between tests through databases or caches, objects stored elsewhere by method bodies, and gems that enumerate classes are outside the assumption. When the closure contains a controller, a view helper, or `config/routes.rb`, every test that issues HTTP requests stays a candidate. A class-name match in an `app/views/` template disables the assumption because view specs and mailers can render without HTTP. The plan's `assumptions` entry shows whether the assumption was applied and, if not, why. Verify its effect with the full-suite comparison before relying on it. See [selection-safety.md](docs/selection-safety.md).
 
 ## Scope and limitations
 

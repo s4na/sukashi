@@ -36,7 +36,7 @@ bundle exec sukashi plan --base origin/main > plan.json
 bundle exec sukashi run --plan plan.json > comparison.json
 ```
 
-`subset` では選択したIDと全件を順に実行します。`full` は全件を1回実行します。`skip`（差分なし、または明示したドキュメントのみ）でも照合用の全件は実行します。JSONは標準出力、テストのログは標準エラーに出ます。`full_only_failures` は全件でのみ失敗したID、`inventory_drift` は列挙・選択・実行したIDの不一致です。テストの失敗や照合の不一致は終了コード1、設定・起動前の入力エラーは2です。全件との並走中は、ファイル丸ごと選んだ場合の件数（`file_level_count`）と個別ID数を比較できます。時間は列挙・解析の `plan_seconds`、選択実行の `selected_seconds`、全件の `full_seconds` を分けて記録します。
+`subset` では選択したIDと全件を順に実行します。`full` は全件を1回実行します。`skip`（差分なし、または明示したドキュメントのみ）でも照合用の全件は実行します。JSONは標準出力、テストのログは標準エラーに出ます。`full_only_failures` は全件でのみ失敗したID、`inventory_drift` は列挙・選択・実行したIDの不一致です。テストの失敗や照合の不一致は終了コード1、設定・起動前の入力エラーは2です。全件との並走中は、ファイル丸ごと選んだ場合の件数（`file_level_count`）と個別ID数を比較できます。時間は列挙・解析の `plan_seconds`、ジョブごとの再列挙の `rediscovery_seconds`（未実施は null）、選択実行の `selected_seconds`、全件の `full_seconds` を分けて記録します。
 
 ## 既存のテストジョブを登録する
 
@@ -85,7 +85,7 @@ glob は Ruby の `File.fnmatch?`（`FNM_PATHNAME | FNM_DOTMATCH`）で評価し
 assume: [constant_reachability]
 ```
 
-eval、名前を組み立てる `constantize` / `const_get`、`descendants`、名前と引数を動的に渡す `send`、`inflections` がリポジトリのどこかにある場合や、閉包に共有 hook・`full_on` のパス・グローバル変数への代入・読み込み時の外部呼び出し・gem 名前空間の再オープンが入る場合、Ruby 以外の追跡ファイル（`ignore` に一致するものを除く）にクラス名の形が現れる場合は、仮定を使わず通常の解析に戻ります。テスト間で DB やキャッシュを通じて受け渡される状態、メソッド本体から変数経由で外部へ保存したオブジェクト、gem によるクラスの列挙はこの仮定の外です。閉包にコントローラー・ヘルパー・`config/routes.rb` が入った場合と、`app/views/` のテンプレートにクラス名の形が現れる場合は、HTTP リクエストを発行するテストをまとめて候補に残します。仮定を使ったかどうかと使わなかった理由は plan の `assumptions` に出ます。全件との照合で効果と抜けを確かめてから使ってください。詳細は [selection-safety.md](docs/selection-safety.md) にあります。
+eval、名前を組み立てる `constantize` / `const_get`、`descendants`、名前と引数を動的に渡す `send`、`inflections` がリポジトリのどこかにある場合や、閉包に共有 hook・`full_on` のパス・グローバル変数への代入・読み込み時の外部呼び出し・gem 名前空間の再オープンが入る場合、Ruby 以外の追跡ファイル（`ignore` に一致するものを除く）にクラス名の形が現れる場合は、仮定を使わず通常の解析に戻ります。テスト間で DB やキャッシュを通じて受け渡される状態、メソッド本体から変数経由で外部へ保存したオブジェクト、gem によるクラスの列挙はこの仮定の外です。閉包にコントローラー・ヘルパー・`config/routes.rb` が入った場合は、HTTP リクエストを発行するテストをまとめて候補に残します。`app/views/` のテンプレートにクラス名の形が現れる場合は、view spec や mailer からの描画も考慮して仮定を使いません。仮定を使ったかどうかと使わなかった理由は plan の `assumptions` に出ます。全件との照合で効果と抜けを確かめてから使ってください。詳細は [selection-safety.md](docs/selection-safety.md) にあります。
 
 設定変更は plan の fingerprint に反映されます。この変更前に作った plan も不一致になり、既存の仕組みで全件実行に戻ります。
 

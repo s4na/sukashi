@@ -100,6 +100,7 @@ class RuntimeIdentityTest < Minitest::Test
     refute_includes identity, "BUNDLE_GEMFILE"
     report = run_plan(value)
     assert_equal "subset", report.fetch("mode")
+    assert_operator report.fetch("rediscovery_seconds"), :>=, 0
     assert_equal ["FeeTest#test_gift"], report.fetch("selected_ids")
     assert report.fetch("ok")
   end
@@ -110,6 +111,7 @@ class RuntimeIdentityTest < Minitest::Test
     report = run_plan(value)
     assert_equal "full", report.fetch("mode")
     assert_match(/runtime identity/, report.fetch("reason"))
+    assert_operator report.fetch("rediscovery_seconds"), :>=, 0
     fresh = plan
     @env["RUBYOPT"] = [ENV["RUBYOPT"], "-W0"].compact.join(" ")
     assert_equal "full", run_plan(fresh).fetch("mode")
@@ -143,6 +145,7 @@ class RuntimeIdentityTest < Minitest::Test
     value = plan
     assert_equal "full", value.dig("jobs", "unit", "mode")
     assert_equal "mutable_dependency", value.dig("runtime", "unit", "reason")
+    assert_nil run_plan(value).fetch("rediscovery_seconds")
     File.write(source, "module OutsideExample; VALUE = 1; end\n")
     assert_equal "full", run_plan(value).fetch("mode")
     assert_equal "full", plan.dig("jobs", "unit", "mode")

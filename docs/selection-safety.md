@@ -33,7 +33,6 @@
 - U で定義するクラス・モジュールの名前の形（CamelCase、snake_case、末尾語の複数形を含む接頭辞、不規則複数形）を文字列・シンボルリテラルに含む Ruby ファイル。テストファイルが定義するクラスは対象外。
 - U のクラスのスーパークラスを定義するファイル（STI や `find` で派生クラスが返るため）。`self.abstract_class = true` を宣言するクラスは除く。
 - U にコントローラー・ビューヘルパー（`app/controllers/`・`app/helpers/` 配下か、名前が `Controller`・`Helper` で終わるクラス・モジュール）か `config/routes.rb` が入ったら、HTTP リクエスト・`visit` を発行するすべてのファイル。リクエストはルーティングを経てコントローラーに届き、テンプレートはヘルパーをメソッド名で呼ぶため、名前を書かずに到達する。URL の解決可否にかかわらずまとめて加える。
-- `app/views/` のテンプレートが名前の形を含む場合も、同じく HTTP を発行するすべてのファイルを加える（テンプレートはリクエスト経由でしか描画されないため）。
 
 旧版の U にも新版の U にも入らないテストファイルの例を `unreachable_change` で除外する。変更されたテスト、カスタムプロトコルは従来どおり先に選ぶ。U の中のテストは従来の解析で判定する。
 
@@ -43,7 +42,7 @@
 - U に共有 hook（テスト以外の hook と `config.before` などのスコープ外 hook）、`full_on` に一致するパス（`config/routes.rb` を除く）、グローバル変数への代入がある。HTTP を発行するファイルが support など `full_on` 側にあれば、ここで使わない側に倒れる。
 - U のファイルが読み込み時（メソッド・lambda・遅延ブロックの外）に、U で定義していない定数や動的な receiver のメソッドを呼ぶ。`RSpec`・`FactoryBot`・`Struct` など状態を保持しない一部の定数は除く。
 - U がコアや Gemfile.lock の gem 名と同じ最上位名前空間を再オープンする。
-- `ignore` に一致しない Ruby 以外の追跡ファイル（`app/views/` 以外の fixture YAML、アセット、ドキュメントなど）に名前の形が現れる。
+- `ignore` に一致しない Ruby 以外の追跡ファイル（fixture YAML、アセット、ドキュメントなど）に名前の形が現れる。`app/views/` のテンプレートは view spec や mailer からも描画されるため、名前の形が現れれば `ignore` にかかわらず仮定を使わない。
 
 plan の `assumptions.constant_reachability` に、仮定を使ったか（`applied`）と、使わなかった場合の理由（`reason`、例: `head: reflective lookup in app/models/x.rb`）を出す。shadow 計測では、この理由の分布で仮定が効かない原因を集計する。
 
@@ -65,7 +64,7 @@ plan の `assumptions.constant_reachability` に、仮定を使ったか（`appl
 - PR の head、merge-base、設定 fingerprint、seed、Ruby・ランナー・Sukashi の版、ジョブ名を固定して記録する。DB、外部サービス、キャッシュなど比較条件も揃える。
 - 同じ head と設定で `plan` と `run` の JSON を保存する。plan の `jobs.*.reason` と `mode`、比較結果の `full_only_failures` と `inventory_drift` を保持する。理由の機械可読コードは別の拡張であり、現在の自由文を安定した API とみなさない。
 - 実行した PR・ジョブを分母にし、full の理由別件数と subset の割合を集計する。PR 単位では「一つでも subset」「全ジョブ full」を別に数え、ジョブ数の多いアプリに引きずられないようにする。失敗・起動不能の試行を削減実績から除外しても、件数と理由は残す。
-- `plan_seconds` は plan 全体、`selected_seconds` と `full_seconds` はジョブ単位。複数ジョブで plan 時間を重複加算しない。選択実行時間の差だけでなく、列挙・解析の費用を含む推定純削減を示す。shadow は全件も実行するため、実際の CI 時間を短縮したとは報告しない。
+- `plan_seconds` は plan 全体、再列挙の `rediscovery_seconds`、`selected_seconds`、`full_seconds` はジョブ単位。複数ジョブで plan 時間を重複加算しない。選択実行時間の差だけでなく、列挙・解析の費用を含む推定純削減を示す。shadow は全件も実行するため、実際の CI 時間を短縮したとは報告しない。
 - `file_level_count` は選択されたテストをファイル単位に広げた件数であり、ファイル単位実行の実測時間ではない。時間を比較するなら同じ環境の別ジョブで測定する。
 - request、system、単体テストを含むジョブごとに件数・時間・照合結果を確認する。全件で再現しない失敗や外部状態の差は、この照合だけでは選択漏れを検出できない。
 

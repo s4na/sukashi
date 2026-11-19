@@ -188,6 +188,10 @@
           "full_only_job": {
             "type": "boolean"
           },
+          "rediscovery_seconds": {
+            "type": ["number", "null"],
+            "minimum": 0
+          },
           "selected_seconds": {
             "type": [
               "number",

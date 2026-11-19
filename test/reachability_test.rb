@@ -73,6 +73,18 @@ class ReachabilityTest < Minitest::Test
     assert_equal :other_arm, reach.inspect_test(path, 3)
   end
 
+  def test_resources_cannot_be_bypassed_by_a_later_literal_route
+    literal = 'get "/orders/preview", to: "orders#preview"'
+    path = Prism.parse('"/orders/preview"').value.statements.body.first
+    routes = ->(*lines) do
+      source = "Rails.application.routes.draw do\n#{lines.join("\n")}\nend"
+      Sukashi::SourceIndex.new("config/routes.rb" => source).routes
+    end
+    assert_nil routes.call("resources :orders", literal).lookup(:get, path)
+    assert_equal ["OrdersController", false, :preview], routes.call(literal, "resources :orders").lookup(:get, path)
+    assert_equal ["OrdersController", false, :preview], routes.call("resources :users", literal).lookup(:get, path)
+  end
+
   def test_rack_middleware_keeps_http_paths_without_widening_unit_tests
     sources = index("500").sources.merge(
       "orders.rb" => "class OrdersController; def show; render plain: Fee.fee(false); end; end",

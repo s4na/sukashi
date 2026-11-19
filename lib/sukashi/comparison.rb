@@ -29,9 +29,11 @@ module Sukashi
             decision = { "mode" => "full", "reason" => detail.fetch("message"), "reason_detail" => detail }
           end
         end
-        [name, compare(runner, decision, job["runner"])]
+        report = compare(runner, decision, job["runner"])
+        report["rediscovery_seconds"] = current&.seconds
+        [name, report]
       end
-      { "version" => 1, "schema_minor" => 1, "failure_policy" => @failure_policy, "head" => @repo.revision("HEAD"), "seed" => seed, "plan_seconds" => @plan["plan_seconds"], "jobs" => reports, "ok" => reports.values.all? { |r| r["ok"] } }
+      { "version" => 1, "schema_minor" => 2, "failure_policy" => @failure_policy, "head" => @repo.revision("HEAD"), "seed" => seed, "plan_seconds" => @plan["plan_seconds"], "jobs" => reports, "ok" => reports.values.all? { |r| r["ok"] } }
     end
 
     private
