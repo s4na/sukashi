@@ -153,7 +153,7 @@ module Sukashi
         forms << (words[0...-1] + [word]).join("_")
         forms << prefix + word.capitalize if prefix
       end
-      forms.select { |form| form.length >= 3 }.uniq
+      forms.uniq
     end
 
     # A prefix of every common English plural: drop -es/-ies/-ves endings.

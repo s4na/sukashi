@@ -41,6 +41,20 @@ class ConstantReachabilityTest < Minitest::Test
     assert_includes reach, "test/other_test.rb"
   end
 
+  def test_literal_lookups_of_short_names_join_the_closure
+    %w[X IP].each do |name|
+      path = "lib/#{name.downcase}.rb"
+      subject = analysis({
+        path => "class #{name}; end",
+        "app/models/other.rb" => "class Other; def self.run; '#{name}'.constantize; end; end"
+      })
+      reach = subject.closure([path])
+      assert_includes reach, "test/other_test.rb"
+      assert_includes subject.forms, name
+      assert_includes subject.forms, name.downcase
+    end
+  end
+
   def test_irregular_plural_and_multiword_names
     forms = analysis.send(:name_forms, "SalesPerson")
     assert_includes forms, "sales_people"
