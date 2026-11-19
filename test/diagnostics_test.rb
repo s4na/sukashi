@@ -130,6 +130,35 @@ class DiagnosticsTest < Minitest::Test
     end
   end
 
+  def test_incomplete_minitest_worker_cannot_be_hidden_by_its_wrapper
+    Dir.mktmpdir do |dir|
+      suite = File.join(dir, "interrupted_test.rb")
+      File.write(suite, <<~RUBY)
+        require "minitest/autorun"
+        class InterruptedTest < Minitest::Test
+          def test_shutdown
+            exit! 17
+          end
+        end
+      RUBY
+      wrapper = 'system(RbConfig.ruby, ARGV.fetch(0)); exit 0'
+      job = { "runner" => "minitest", "command" => [RbConfig.ruby, "-e", wrapper, suite] }
+      runner = Sukashi::Runner.new(job, 1)
+      report = Sukashi::Comparison.new(nil, nil, {}).send(:compare, runner, { "mode" => "full" }, "minitest")
+      assert_equal "failed", report.fetch("full_status")
+      refute report.fetch("ok")
+    end
+  end
+
+  def test_minitest_signal_before_reporter_startup_is_not_retried_as_plain
+    # A plain retry would exit successfully and mask the signal.
+    command = [RbConfig.ruby, "-e", 'Process.kill("KILL", Process.pid) if ENV["SUKASHI_REPORT_DIR"]']
+    runner = Sukashi::Runner.new({ "runner" => "minitest", "command" => command }, 1)
+    report = Sukashi::Comparison.new(nil, nil, {}).send(:compare, runner, { "mode" => "full" }, "minitest")
+    assert_equal "failed", report.fetch("full_status")
+    refute report.fetch("ok")
+  end
+
   def test_comparison_serializes_launch_status
     config = Struct.new(:jobs, :fingerprint).new(
       { "custom" => { "runner" => "command", "command" => ["sukashi-nonexistent-test-command"] } }, "config")
