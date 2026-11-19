@@ -155,7 +155,7 @@ class SelectionTest < Minitest::Test
     report = cli("check", "--base", @base, code: 1)
     assert_equal [RECEIPT_REQUEST], report.dig("jobs", "rspec", "full_failures")
     assert_equal [RECEIPT_SYSTEM], report.dig("jobs", "minitest", "full_failures")
-    assert report.fetch("jobs").values.all? { |job| job["mode"] == "full" && job["full_count"] == 4 }
+    assert(report.fetch("jobs").values.all? { |job| job["mode"] == "full" && job["full_count"] == 4 })
   end
 
   # The regular action itself only calls fee(false). Both overlays cause a
@@ -394,6 +394,6 @@ class SelectionTest < Minitest::Test
     report = cli("check", "--base", @base, code: 1)
     assert_equal [REGULAR_REQUEST, GIFT_REQUEST, RECEIPT_REQUEST, GIFT_SYSTEM].sort, report.dig("jobs", "rspec", "full_failures")
     assert_equal [GIFT_UNIT, REGULAR_UNIT, RACK_REQUEST, RECEIPT_SYSTEM].sort, report.dig("jobs", "minitest", "full_failures")
-    assert report.fetch("jobs").values.all? { |job| job["mode"] == "full" }
+    assert(report.fetch("jobs").values.all? { |job| job["mode"] == "full" })
   end
 end

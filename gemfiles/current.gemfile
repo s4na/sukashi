@@ -1,6 +1,8 @@
 source "https://rubygems.org"
 gemspec path: ".."
 
+gem "rake", "~> 13.0"
+
 gem "prism", ">= 2", "< 3"
 gem "minitest", "~> 6.0"
 gem "rspec", "~> 3.13.0"
