@@ -122,6 +122,28 @@ class SchemaContractTest < Minitest::Test
     refute report.fetch("ok")
   end
 
+  def test_inventory_evidence_controls_plan_reuse
+    saved = plan(repo)
+    [
+      [ROWS.reverse, "subset"],
+      [[ROWS.first, ROWS.last.merge("custom_protocol" => true)], "full"],
+      [[ROWS.first, ROWS.last.merge("line" => 7)], "full"],
+      [[ROWS.first, ROWS.last.merge("file" => "test/other_test.rb")], "full"]
+    ].each do |rows, expected|
+      result = Sukashi::Result.new(ok: true, rows: rows, runtime_identity: RUNTIME)
+      runner = Object.new
+      runner.define_singleton_method(:invoke) { |**_| result }
+      report = stub_method(Sukashi::Runner, :new, runner) { Sukashi::Comparison.new(repo, config, saved).run }
+      assert_equal expected, report.dig("jobs", "tests", "mode")
+    end
+    saved["jobs"]["tests"].delete("inventory_digest")
+    result = Sukashi::Result.new(ok: true, rows: ROWS, runtime_identity: RUNTIME)
+    runner = Object.new
+    runner.define_singleton_method(:invoke) { |**_| result }
+    report = stub_method(Sukashi::Runner, :new, runner) { Sukashi::Comparison.new(repo, config, saved).run }
+    assert_equal "full", report.dig("jobs", "tests", "mode")
+  end
+
   def test_schema_rejects_wrong_version_mode_and_ids
     document = plan(repo)
     document["version"] = 2

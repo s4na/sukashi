@@ -12,8 +12,10 @@ module Sukashi
     def plan
       started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       runtimes = {}
+      inventory_digests = {}
       jobs = @config.jobs.to_h do |name, job|
         inventory = Runner.new(job, @seed).invoke(discover: true)
+        inventory_digests[name] = inventory.inventory_digest if inventory.ok
         runtimes[name] = inventory.ok ? inventory.runtime_identity : nil
         [name, inventory.ok ? inventory.rows : nil]
       end
@@ -30,9 +32,10 @@ module Sukashi
         else
           select(rows)
         end
+        decision["inventory_digest"] = inventory_digests[name] if inventory_digests[name]
         [name, decision.merge("inventory" => rows&.map { |r| r["id"] }&.sort)]
       end
-      document = { "version" => 1, "schema_minor" => 2, "base" => @base, "head" => @head,
+      document = { "version" => 1, "schema_minor" => 3, "base" => @base, "head" => @head,
                    "config" => @config.fingerprint, "seed" => @seed, "jobs" => decisions, "runtime" => runtimes }
       document["assumptions"] = assumptions(reason) unless @config.assume.empty?
       document.merge("plan_seconds" => (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(3))

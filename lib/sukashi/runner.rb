@@ -1,4 +1,5 @@
 require "json"
+require "digest"
 require "tmpdir"
 require "pathname"
 require_relative "diagnostics"
@@ -7,6 +8,14 @@ module Sukashi
   Result = Struct.new(:ok, :rows, :seconds, :status, :runtime_identity, :exit_status, keyword_init: true) do
     def ids
       rows&.map { |r| r.fetch("id") }&.sort
+    end
+
+    def inventory_digest
+      return unless rows
+      evidence = rows.sort_by { |row| row.fetch("id") }.map do |row|
+        [row.fetch("id"), row["file"], row["line"], !!row["custom_protocol"]]
+      end
+      Digest::SHA256.hexdigest(JSON.generate(evidence))
     end
 
     def failures

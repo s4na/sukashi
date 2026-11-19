@@ -23,7 +23,8 @@ module Sukashi
           saved = @plan["runtime"].is_a?(Hash) ? @plan["runtime"][name] : nil
           current = runner.invoke(discover: true) if verified_runtime?(saved)
           unless current && current.ok && verified_runtime?(current.runtime_identity) && saved == current.runtime_identity &&
-                 decision["inventory"].is_a?(Array) && current.ids == decision["inventory"]
+                 decision["inventory"].is_a?(Array) && current.ids == decision["inventory"] &&
+                 current.inventory_digest == decision["inventory_digest"]
             detail = Reasons.build("runtime_identity_changed")
             decision = { "mode" => "full", "reason" => detail.fetch("message"), "reason_detail" => detail }
           end
