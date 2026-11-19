@@ -1,5 +1,4 @@
 require "minitest/autorun"
-require "set"
 require_relative "../lib/sukashi/constant_reachability"
 
 class ConstantReachabilityTest < Minitest::Test

@@ -1,5 +1,4 @@
 require "prism"
-require "set"
 require_relative "source_index"
 
 module Sukashi
@@ -78,14 +77,14 @@ module Sukashi
       changed.each(&push)
       pull_http.call if http
       until queue.empty?
-        path = queue.shift
-        @index.users_of(path).each(&push)
-        facts = @facts[path]
-        pull_http.call if path == ROUTES || controller?(path, facts)
+        current = queue.shift
+        @index.users_of(current).each(&push)
+        facts = @facts[current]
+        pull_http.call if current == ROUTES || controller?(current, facts)
         next unless facts
         facts.classes.each { |name, _| segments.merge(name.split("::")) }
         # Application code does not name or instantiate test classes.
-        next if @test_paths.include?(path)
+        next if @test_paths.include?(current)
         facts.classes.each do |name, superclass|
           name_forms(name.split("::").last).each do |form|
             next unless @forms.add?(form)
@@ -156,10 +155,12 @@ module Sukashi
 
     # A prefix of every common English plural: drop -es/-ies/-ves endings.
     def stem(word)
-      cut = if word.length >= 5 then 2
-            elsif word.end_with?("fe") then 2
-            elsif word.end_with?("y", "f", "s") then 1
-            else 0
+      cut = if word.length >= 5 || word.end_with?("fe")
+              2
+            elsif word.end_with?("y", "f", "s")
+              1
+            else
+              0
             end
       stemmed = word[0, word.length - cut]
       stemmed.length >= 3 ? stemmed : word
@@ -206,6 +207,8 @@ module Sukashi
     end
 
     def walk(node, path, facts, owner, deferred)
+      return unless node
+
       case node
       when Prism::ClassNode, Prism::ModuleNode
         name = SourceIndex.constant(node.constant_path)
