@@ -24,6 +24,7 @@ module Sukashi
         params = method.node.parameters
         body = method.node.body
         next unless params && params.compact_child_nodes.one? && params.requireds.one? && body.is_a?(Prism::StatementsNode) && body.body.one?
+        next unless params.requireds.first.is_a?(Prism::RequiredParameterNode)
         branch = body.body.first
         next unless branch.is_a?(Prism::IfNode) && branch.if_keyword == "if" && branch.subsequent.is_a?(Prism::ElseNode)
         next unless branch.predicate.is_a?(Prism::LocalVariableReadNode) && branch.predicate.name == params.requireds.first.name
@@ -162,6 +163,7 @@ module Sukashi
         trace(taken, { method.node.parameters.requireds.first.name => arm }, stack + [key])
       else
         params = method.node.parameters
+        return @unknown = true if params && !params.requireds.all?(Prism::RequiredParameterNode)
         names = params ? params.requireds.map(&:name) : []
         return @unknown = true unless names.size == values.size && (!params || params.compact_child_nodes.size == names.size)
         trace(method.node.body, names.zip(values).to_h, stack + [key])

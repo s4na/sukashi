@@ -14,6 +14,18 @@ class ReachabilityTest < Minitest::Test
     assert_nil Sukashi::BranchDiff.between(old, index("500", predicate: "!gift"), "lib/fee.rb")
   end
 
+  def test_destructured_required_arguments_keep_candidates
+    method = "def self.rate((gift, amount)); if gift; 500; else; 100; end; end"
+    old = index(nil, body: method)
+    changed = index(nil, body: method.sub("500", "700"))
+    assert_nil Sukashi::BranchDiff.between(old, changed, "lib/fee.rb")
+
+    path = "test/fee_test.rb"
+    sources = old.sources.merge(path => "class T; def test_rate; Fee.rate(true); end; end")
+    analysis = Sukashi::Reachability.new(Sukashi::SourceIndex.new(sources), {}, Set[path], Set.new)
+    assert_equal :unknown, analysis.inspect_test(path, 1)
+  end
+
   def test_teardown_lifecycle_keeps_tests_in_derived_classes
     target = { ["Fee", true, :fee] => { paths: ["lib/fee.rb"], arms: [true] } }
     paths = Set["test/base_test.rb", "test/derived_test.rb"]
