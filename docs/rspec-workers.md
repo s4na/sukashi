@@ -2,6 +2,8 @@
 
 RSpec の列挙と実行は、プロセスごとの `rspec-PID.json` に結果を保存します。開始マーカーと完了したレポートを照合し、未完了・壊れたJSON・重複ID・不正な件数・example外エラーは成功扱いしません。既知のinventoryと実行IDの差は従来どおり `inventory_drift` になります。
 
+RSpec の失敗履歴（`example_status_persistence_file_path`）を使う場合、選択実行と失敗 ID の再試行は履歴を読み取り、全件実行だけが結果を書き戻します。`--only-failures` の全件ジョブは、選択実行前に失敗していた example を対象にします。
+
 対応するラッパーには次の契約が必要です。
 
 - Sukashi が追加したRSpecオプションと環境変数を、各RSpec子プロセスに引き継ぐ。

@@ -13,6 +13,9 @@ module Sukashi
     end
 
     def close(_notification)
+      # RSpec persists statuses after the formatter closes. Selected runs (including
+      # retries) must read the job's history without replacing the full run's results.
+      RSpec.configuration.example_status_persistence_file_path = nil if ENV["SUKASHI_SELECT"]
       File.write(@report_path + ".tmp", JSON.generate(output_hash))
       File.rename(@report_path + ".tmp", @report_path)
     end
