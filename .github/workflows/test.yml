@@ -6,15 +6,30 @@ permissions:
   contents: read
 jobs:
   test:
+    name: Ruby ${{ matrix.ruby }} / ${{ matrix.dependencies }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { ruby: '3.2', dependencies: minimum, gemfile: gemfiles/minimum.gemfile }
+          - { ruby: '3.3', dependencies: minimum, gemfile: gemfiles/minimum.gemfile }
+          - { ruby: '3.4', dependencies: current, gemfile: gemfiles/current.gemfile }
+          - { ruby: '4.0', dependencies: locked, gemfile: Gemfile }
+    env:
+      BUNDLE_GEMFILE: ${{ matrix.gemfile }}
     steps:
       - uses: actions/checkout@v4
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '4.0'
+          ruby-version: ${{ matrix.ruby }}
+          bundler: '2.6.9'
           bundler-cache: true
-      - run: bundle exec ruby -Itest -e 'Dir["test/*_test.rb"].sort.each { |file| require_relative file }'
+      - name: Record resolved dependency versions
+        run: bundle list
+      - run: bundle exec rake test
       - name: Verify the stamped gem
+        if: matrix.dependencies == 'locked'
         shell: bash
         run: |
           read -r previous _ < RELEASE
@@ -32,3 +47,16 @@ jobs:
             abort "packaged license metadata mismatch" unless spec.licenses == ["MIT"]
             abort "missing LICENSE in the gem archive" unless package.contents.include?("LICENSE")
           ' "$RUNNER_TEMP/sukashi.gem" "$version" "$revision"
+
+  ruby-lint:
+    runs-on: ubuntu-latest
+    env:
+      BUNDLE_GEMFILE: gemfiles/lint.gemfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler: '2.6.9'
+          bundler-cache: true
+      - run: bundle exec rubocop --lint
