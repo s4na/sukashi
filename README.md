@@ -68,6 +68,10 @@ ignore: ["docs/**/*.md"]
 
 同じheadの外部path gem編集を見逃してsubsetを再利用しないための保守的な制約です。理由は `runtime identity unavailable` または `runtime identity changed or unavailable` に出ます。`runner: command` や列挙できないラッパーも全件扱いです。再列挙にはアプリ起動の時間と副作用が加わります。確認後の外部ファイル変更との競合を防ぐため、CIでは実行中の依存と環境を固定してください。
 
+## エラーの診断
+
+入力・設定エラーは終了コード2、予期しない内部エラーはバックトレース付きで3を返します。`--verbose` または `SUKASHI_DEBUG=1` でコマンド・詳細をstderrへ出せます。レポートの `full_status` / `selected_status` は実行失敗と起動失敗を区別します。[診断出力と注意点](docs/diagnostics.md)
+
 ## 選択の範囲
 
 初版は、真偽値の仮引数を直接調べるクラスメソッドの `if ... else ... end` で、片側のリテラルなどの変更を識別します。リテラル引数を直接渡すテストや、URLを文字列リテラルで指定したRailsルート → action → クラスメソッドの経路なら反対側だけを通るテストを省けます。controllerの応答を追えるのは単純な `render plain:` までです。アプリで設定したRack middlewareがあるHTTP経路、暗黙の描画、テンプレート・layoutの描画、prepend等によるメソッドの差し替えは未解決として残します。条件の変更、移動・削除などは両版のファイル依存に広げます。動的な呼び出し・共有setupは候補に残し、parse失敗、未分類の変更、比較元の欠落などでは全件実行に戻ります。RSpecグループ内の `let` や `before` は、そのファイルと利用元を候補に残します。controllerの `before_action` は、そのcontrollerや継承先を通る経路に影響します。共通helperの `fixtures :all` や `config.before` のように帰属を限定できないフックがある場合は、全件に戻るため削減できません。全件照合で失敗を再現できることが、選択漏れを検出する条件です。
