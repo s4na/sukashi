@@ -62,7 +62,7 @@ module Sukashi
       rows = files.flat_map do |file|
         data = JSON.parse(File.read(file))
         if @job["runner"] == "rspec"
-          return if data.fetch("summary").fetch("errors_outside_of_examples_count", 0).positive?
+          return nil if data.fetch("summary").fetch("errors_outside_of_examples_count", 0).positive?
           data.fetch("examples").map do |e|
             { "id" => e.fetch("id"), "file" => e.fetch("file_path"), "line" => e.fetch("line_number"),
               "status" => e.fetch("status"), "custom_protocol" => e["custom_protocol"] }

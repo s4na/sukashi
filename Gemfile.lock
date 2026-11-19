@@ -163,6 +163,7 @@ PLATFORMS
 DEPENDENCIES
   capybara
   minitest
+  rake (~> 13.0)
   rspec
   rspec-rails
   sukashi!
