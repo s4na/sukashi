@@ -65,7 +65,7 @@ plan の `assumptions.constant_reachability` に、仮定を使ったか（`appl
 - PR の head、merge-base、設定 fingerprint、seed、Ruby・ランナー・Sukashi の版、ジョブ名を固定して記録する。DB、外部サービス、キャッシュなど比較条件も揃える。
 - 同じ head と設定で `plan` と `run` の JSON を保存する。plan の `jobs.*.reason` と `mode`、比較結果の `full_only_failures` と `inventory_drift` を保持する。理由の機械可読コードは別の拡張であり、現在の自由文を安定した API とみなさない。
 - 実行した PR・ジョブを分母にし、full の理由別件数と subset の割合を集計する。PR 単位では「一つでも subset」「全ジョブ full」を別に数え、ジョブ数の多いアプリに引きずられないようにする。失敗・起動不能の試行を削減実績から除外しても、件数と理由は残す。
-- `plan_seconds` は plan 全体、`selected_seconds` と `full_seconds` はジョブ単位。複数ジョブで plan 時間を重複加算しない。選択実行時間の差だけでなく、列挙・解析の費用を含む推定純削減を示す。shadow は全件も実行するため、実際の CI 時間を短縮したとは報告しない。
+- `plan_seconds` は plan 全体、再列挙の `rediscovery_seconds`、`selected_seconds`、`full_seconds` はジョブ単位。複数ジョブで plan 時間を重複加算しない。選択実行時間の差だけでなく、列挙・解析の費用を含む推定純削減を示す。shadow は全件も実行するため、実際の CI 時間を短縮したとは報告しない。
 - `file_level_count` は選択されたテストをファイル単位に広げた件数であり、ファイル単位実行の実測時間ではない。時間を比較するなら同じ環境の別ジョブで測定する。
 - request、system、単体テストを含むジョブごとに件数・時間・照合結果を確認する。全件で再現しない失敗や外部状態の差は、この照合だけでは選択漏れを検出できない。
 

@@ -1,4 +1,4 @@
-# JSON contract (plan 1.2, report 1.1)
+# JSON contract (plan 1.2, report 1.2)
 
 The checked-in schemas use JSON Schema Draft 2020-12. `version` is the major version; `schema_minor` is additive evolution within that major. Missing `schema_minor` in an existing version-1 plan means 1.0. The runner continues to accept these old plans. Old reports without `version` predate the published report contract.
 
@@ -11,6 +11,8 @@ Plans contain committed `base` (nullable when unavailable), `head`, configuratio
 Each job has `mode` (full/subset/skip) and `inventory` (IDs or null). Full/skip decisions carry the original human `reason` and additive `reason_detail`. Subsets retain the original ID-to-message `selected`/`excluded` maps and add ID-to-detail `selected_details`/`excluded_details`, `file_level_count` and branch evidence. A branch contains path, method, then/else arm and reachable IDs.
 
 Reports contain the current head, seed, `failure_policy` (`strict` or `missed`), original plan duration, per-job results and aggregate `ok`. Each result preserves mode/reason, selected/executed IDs, file/full counts, selected/full/full-only failure IDs, inventory drift, opaque-job flag, timings and `ok`. `selected_status` / `full_status` are `passed`, `failed`, `failed_to_start` or `unavailable` (null when not run). `selected_only_failures` lists IDs that failed only in the selected run. Retry diagnosis adds `missed_failures`, `flaky_or_order_dependent`, `unclassified_full_only_failures`, `retry_ids`, `retry_seconds` and `retry_ok`; the retry fields are null when no retry ran. Null IDs/counts/times mean unavailable or not run, never an empty successful run. Job `reason_detail` is null when no overall fallback reason exists. An older plan's prose is preserved as `legacy_reason`; it is not parsed or reclassified.
+
+Since report 1.2, each job includes `rediscovery_seconds`, the elapsed time of the inventory check before running a saved decision. It includes an attempted discovery that causes a fallback to full execution. The value is null when discovery was not attempted. `plan_seconds` measures the original planning pass once across jobs.
 
 A reason detail contains `code`, a human `message`, and optional `path` or `paths`. Consumers must not parse `message`. Paths are repository-relative. The parse_failed detail lists each source path that could not be parsed.
 
