@@ -1,5 +1,6 @@
 require_relative "selection"
 require_relative "runner"
+require_relative "reasons"
 
 module Sukashi
   class Planner
@@ -19,26 +20,35 @@ module Sukashi
       reason = prepare
       decisions = jobs.to_h do |name, rows|
         decision = if runtimes.dig(name, "status") != "verified"
-          { "mode" => "full", "reason" => "runtime identity unavailable" }
+          decision_with_reason("full", Reasons.build("runtime_identity_unavailable"))
         elsif reason == :skip
-          { "mode" => "skip", "reason" => "no executable changes" }
+          decision_with_reason("skip", Reasons.build("no_executable_changes"))
         elsif reason || !rows || rows.empty?
-          { "mode" => "full", "reason" => reason || "job inventory unavailable or empty" }
+          decision_with_reason("full", reason || Reasons.build("inventory_unavailable"))
         else
           select(rows)
         end
         [name, decision.merge("inventory" => rows&.map { |r| r["id"] }&.sort)]
       end
-      { "version" => 1, "base" => @base, "head" => @head, "config" => @config.fingerprint,
+      { "version" => 1, "schema_minor" => 1, "base" => @base, "head" => @head, "config" => @config.fingerprint,
         "seed" => @seed, "jobs" => decisions, "runtime" => runtimes,
         "plan_seconds" => (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(3) }
     end
 
     private
 
+    def decision_with_reason(mode, detail)
+      { "mode" => mode, "reason" => detail.fetch("message"), "reason_detail" => detail }
+    end
+
+    def record_reason(messages, details, id, code)
+      details[id] = Reasons.build(code)
+      messages[id] = details[id].fetch("message")
+    end
+
     def prepare
-      return "working tree differs from requested head" unless @repo.clean?(@head)
-      return "merge base unavailable" unless @base
+      return Reasons.build("working_tree_changed") unless @repo.clean?(@head)
+      return Reasons.build("merge_base_unavailable") unless @base
       changes = @repo.changes(@base, @head)
       changes.reject! do |pair|
         pair.compact.all? do |path|
@@ -48,10 +58,10 @@ module Sukashi
       return :skip if changes.empty?
       paths = changes.flatten.compact
       shared = paths.find { |p| shared?(p) || !p.end_with?(".rb") }
-      return "shared or unclassified dependency: #{shared}" if shared
+      return Reasons.build("shared_dependency", path: shared) if shared
       @old, @new = [@base, @head].map { |rev| SourceIndex.new(@repo.ruby_sources(rev)) }
       errors = @old.errors | @new.errors
-      return "Prism parse failed: #{errors.join(', ')}" unless errors.empty?
+      return Reasons.build("parse_failed", paths: errors) unless errors.empty?
       @only_local_specs = changes.all? do |left, right|
         next false unless left && left == right && @test_paths.include?(left)
         template = @old.local_spec_template(left)
@@ -66,16 +76,16 @@ module Sukashi
         @moved[new_path] = old_path if new_path && old_path != new_path
         @changed_tests << new_path if @test_paths.include?(new_path)
         if (old_path && !@old.sources.key?(old_path)) || (new_path && !@new.sources.key?(new_path))
-          return "source unavailable: #{new_path || old_path}"
+          return Reasons.build("source_unavailable", path: new_path || old_path)
         end
         if [old_path, new_path].compact.any? { |p| shared_hooks.include?(p) }
-          return "shared setup changed: #{new_path || old_path}"
+          return Reasons.build("shared_setup_changed", path: new_path || old_path)
         end
         diff = BranchDiff.between(@old, @new, new_path) if old_path && old_path == new_path
         unless diff
           left = old_path ? @old.dependents([old_path]) : Set.new
           right = new_path ? @new.dependents([new_path]) : Set.new
-          return "no known test dependency: #{new_path || old_path}" if ((left | right) & @test_paths).empty?
+          return Reasons.build("no_test_dependency", path: new_path || old_path) if ((left | right) & @test_paths).empty?
           old_users.merge(left)
           new_users.merge(right)
           next
@@ -100,21 +110,23 @@ module Sukashi
 
     def select(rows)
       selected = {}
+      selected_details = {}
       locations = rows.map { |row| [row["file"], row["line"]] }.tally
       excluded = {}
+      excluded_details = {}
       reached = Hash.new { |h, k| h[k] = Set.new }
       rows.each do |row|
         path, line = row.values_at("file", "line")
         if row["custom_protocol"]
-          selected[row["id"]] = "test runner helper or execution protocol overridden"
+          record_reason(selected, selected_details, row["id"], "custom_test_protocol")
           next
         end
         if @changed_tests.include?(path) || locations[[path, line]] > 1
-          selected[row["id"]] = "changed test or shared definition"
+          record_reason(selected, selected_details, row["id"], "changed_test")
           next
         end
         if @only_local_specs && path && !@local_users.include?(path)
-          excluded[row["id"]] = "only local test bodies changed in other files"
+          record_reason(excluded, excluded_details, row["id"], "other_test_file")
           next
         end
         verdicts = [@analyses.first.inspect_test(@moved.fetch(path, path), line), @analyses.last.inspect_test(path, line)]
@@ -122,13 +134,13 @@ module Sukashi
           analysis.evidence.each { |key, arm| reached[[key, arm]] << row["id"] }
         end
         if verdicts.include?(:affected)
-          selected[row["id"]] = "reaches changed arm"
+          record_reason(selected, selected_details, row["id"], "changed_arm")
         elsif verdicts.include?(:file)
-          selected[row["id"]] = "depends on changed file"
+          record_reason(selected, selected_details, row["id"], "changed_file")
         elsif verdicts.include?(:unknown)
-          selected[row["id"]] = "unresolved execution path"
+          record_reason(selected, selected_details, row["id"], "unresolved_path")
         else
-          excluded[row["id"]] = verdicts.include?(:other_arm) ? "only unchanged arm reachable" : "no dependency found"
+          record_reason(excluded, excluded_details, row["id"], verdicts.include?(:other_arm) ? "unchanged_arm" : "no_dependency")
         end
       end
       files = rows.filter_map { |r| r["file"] if selected.key?(r["id"]) }.to_set
@@ -140,9 +152,10 @@ module Sukashi
         end
       end
       if selected.empty? || selected.size == rows.size
-        { "mode" => "full", "reason" => selected.empty? ? "no confirmed selection" : "all tests are candidates", "branches" => branches }
+        decision_with_reason("full", Reasons.build(selected.empty? ? "no_selection" : "all_candidates")).merge("branches" => branches)
       else
         { "mode" => "subset", "selected" => selected.sort.to_h, "excluded" => excluded.sort.to_h,
+          "selected_details" => selected_details.sort.to_h, "excluded_details" => excluded_details.sort.to_h,
           "file_level_count" => file_level_count, "branches" => branches }
       end
     end

@@ -25,12 +25,16 @@ class FullOnTest < Minitest::Test
   def prepare(configuration, pairs, tests: [])
     planner = Sukashi::Planner.new(Repository.new(pairs), configuration, "head", "base", 1)
     planner.instance_variable_set(:@test_paths, tests.to_set)
-    planner.send(:prepare)
+    result = planner.send(:prepare)
+    result.is_a?(Hash) ? result.fetch("message") : result
   end
 
   def assert_full(configuration, path, old_path: path)
     assert_equal "shared or unclassified dependency: #{old_path || path}",
                  prepare(configuration, [[old_path, path]])
+    planner = Sukashi::Planner.new(Repository.new([[old_path, path]]), configuration, "head", "base", 1)
+    planner.instance_variable_set(:@test_paths, Set.new)
+    assert_equal "shared_dependency", planner.send(:prepare).fetch("code")
   end
 
   def test_defaults_preserve_shared_paths_even_with_broad_ignore

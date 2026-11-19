@@ -103,6 +103,7 @@ glob は Ruby の `File.fnmatch?`（`FNM_PATHNAME | FNM_DOTMATCH`）で評価し
 Tests ワークフローの `test` は `bundle exec rake test`、
 `ruby-lint` は独立した lint bundle で `bundle exec rubocop --lint` を実行します。
 Rake の既定タスクも test です。Lint の導入では全体のスタイル変更は行いません。
+JSON Schema の検証には CI 専用の Python jsonschema を使います。
 
 `require "sukashi"` は各コンポーネントを明示的に読み込み、コマンドを実行しません。
 公開する Ruby API は `Sukashi::CLI.call(argv)` です。引数配列は処理中に変更され、
@@ -127,6 +128,12 @@ bundle exec sukashi check --base origin/main --retry-full-only
 ```
 
 `--failure-policy missed --retry-full-only` は明示的な緩和です。全件プロセスが通常のテスト失敗コード1で終了し、全件失敗がすべてfull-onlyであり、その全IDが再実行でpassed、再実行プロセスも成功、選択実行成功、ID照合一致の場合だけ成功を許可します。選択実行の失敗、未分類、計測不能、起動不能、シグナル終了、終了コード1以外の失敗は成功にしません。ただし終了コード1にまとめられたテスト外のcleanupエラーまでは判別できません。この緩和を合否判定に使う場合は、その制約を受け入れる必要があります。元の `full_failures` / `full_only_failures` は変更しません。厳密なCIの合否には既定の `strict` を使用してください。再実行には追加のCI時間と副作用があるため、テストが再実行可能な環境でのみ有効にしてください。
+
+## JSONの互換性
+
+plan と comparison report は `version`（メジャー）と `schema_minor`（マイナー）を持ちます。現在は 1.1 です。キー・理由コードの追加はマイナー、既存キーの削除・型や意味の変更はメジャーを更新します。利用側は未知のキー・理由コードを許容してください。既存の理由文字列は残し、集計には `reason_detail.code`、`selected_details`、`excluded_details` を使います。
+
+[JSON契約と理由コード](docs/json-contract.md) · [plan schema](schema/plan.v1.json) · [report schema](schema/report.v1.json)
 
 
 ## 参考元とライセンス

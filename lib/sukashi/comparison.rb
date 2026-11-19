@@ -17,19 +17,20 @@ module Sukashi
         @plan["head"] && @repo.clean?(@plan["head"]) && @plan["jobs"].is_a?(Hash) &&
         @config.jobs.keys.sort == @plan["jobs"].keys.sort && @plan["jobs"].values.all? { |v| v.is_a?(Hash) }
       reports = @config.jobs.to_h do |name, job|
-        decision = valid ? @plan["jobs"][name] : { "mode" => "full", "reason" => "stale or invalid plan" }
+        decision = valid ? @plan["jobs"][name] : { "mode" => "full", "reason" => "stale or invalid plan", "reason_detail" => Reasons.build("invalid_plan") }
         runner = Runner.new(job, seed)
         if valid && decision["mode"] != "full"
           saved = @plan["runtime"].is_a?(Hash) ? @plan["runtime"][name] : nil
           current = runner.invoke(discover: true) if verified_runtime?(saved)
           unless current && current.ok && verified_runtime?(current.runtime_identity) && saved == current.runtime_identity &&
                  decision["inventory"].is_a?(Array) && current.ids == decision["inventory"]
-            decision = { "mode" => "full", "reason" => "runtime identity changed or unavailable" }
+            detail = Reasons.build("runtime_identity_changed")
+            decision = { "mode" => "full", "reason" => detail.fetch("message"), "reason_detail" => detail }
           end
         end
         [name, compare(runner, decision, job["runner"])]
       end
-      { "failure_policy" => @failure_policy, "head" => @repo.revision("HEAD"), "seed" => seed, "plan_seconds" => @plan["plan_seconds"], "jobs" => reports, "ok" => reports.values.all? { |r| r["ok"] } }
+      { "version" => 1, "schema_minor" => 1, "failure_policy" => @failure_policy, "head" => @repo.revision("HEAD"), "seed" => seed, "plan_seconds" => @plan["plan_seconds"], "jobs" => reports, "ok" => reports.values.all? { |r| r["ok"] } }
     end
 
     private
@@ -74,7 +75,9 @@ module Sukashi
       ok = strict_ok || (@failure_policy == "missed" && !drift && (!subset || sample.ok) && explained)
       {
         "mode" => subset ? "subset" : (decision["mode"] == "skip" ? "skip" : "full"),
-        "reason" => decision["reason"], "selected_ids" => ids, "executed_ids" => sample&.ids,
+        "reason" => decision["reason"],
+        "reason_detail" => decision["reason_detail"] || Reasons.from_legacy(decision["reason"]),
+        "selected_ids" => ids, "executed_ids" => sample&.ids,
         "file_level_count" => decision["file_level_count"], "full_count" => full.ids&.size, "full_failures" => full.failures,
         "selected_failures" => sample&.failures, "full_only_failures" => missing,
         "inventory_drift" => !!drift, "full_only_job" => opaque,

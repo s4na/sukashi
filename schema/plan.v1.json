@@ -1,0 +1,274 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sukashi plan major version 1",
+  "type": "object",
+  "required": [
+    "version",
+    "base",
+    "head",
+    "config",
+    "seed",
+    "jobs",
+    "plan_seconds"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "schema_minor": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "base": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "head": {
+      "type": "string"
+    },
+    "config": {
+      "type": "string"
+    },
+    "seed": {
+      "type": "integer"
+    },
+    "jobs": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "mode",
+          "inventory"
+        ],
+        "properties": {
+          "mode": {
+            "enum": [
+              "full",
+              "subset",
+              "skip"
+            ]
+          },
+          "inventory": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "uniqueItems": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "reason_detail": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "paths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": true
+          },
+          "selected": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "excluded": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "selected_details": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": [
+                "code",
+                "message"
+              ],
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "paths": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "excluded_details": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": [
+                "code",
+                "message"
+              ],
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "paths": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "branches": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "path",
+                "method",
+                "arm",
+                "reachable_ids"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "method": {
+                  "type": "string"
+                },
+                "arm": {
+                  "enum": [
+                    "then",
+                    "else"
+                  ]
+                },
+                "reachable_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "uniqueItems": true
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "file_level_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "mode": {
+                  "const": "subset"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "selected",
+                "excluded",
+                "file_level_count",
+                "branches"
+              ],
+              "properties": {
+                "selected": {
+                  "minProperties": 1
+                }
+              }
+            },
+            "else": {
+              "required": [
+                "reason"
+              ]
+            }
+          }
+        ],
+        "additionalProperties": true
+      }
+    },
+    "plan_seconds": {
+      "type": "number",
+      "minimum": 0
+    },
+    "runtime": {
+      "description": "Per-job runtime identity observed while planning. Saved subset/skip decisions are reused only when it is verified and matches the current run.",
+      "type": "object",
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "object",
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "type": "string"
+              },
+              "fingerprints": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    }
+  },
+  "additionalProperties": true
+}

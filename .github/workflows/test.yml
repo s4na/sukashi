@@ -25,6 +25,7 @@ jobs:
           ruby-version: ${{ matrix.ruby }}
           bundler: '2.6.9'
           bundler-cache: true
+      - run: python3 -m pip install jsonschema==4.23.0
       - name: Record resolved dependency versions
         run: bundle list
       - run: bundle exec rake test
