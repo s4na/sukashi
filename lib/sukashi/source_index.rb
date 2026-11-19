@@ -15,6 +15,7 @@ module Sukashi
     CONTROLLER_DISPATCH = %i[render render_to_body render_to_string process process_action dispatch send_action].freeze
     MINITEST_HOOKS = %i[before_setup setup after_setup before_teardown teardown after_teardown].freeze
 
+    attr_reader :assigned_names
     attr_reader :sources, :methods, :definitions, :tests, :routes, :dependencies, :errors, :hooks, :unscoped_hooks, :controller_hooks, :custom_http_pipeline, :refinement_scopes, :trees
 
     def initialize(sources)
@@ -24,7 +25,7 @@ module Sukashi
       @http_calls = []
       @named_defs = Hash.new { |h, k| h[k] = Set.new }
       @named_uses = Hash.new { |h, k| h[k] = Set.new }
-      @references = Hash.new { |h, k| h[k] = Set.new }
+      @constant_readers = Hash.new { |h, k| h[k] = Set.new }
       @dependencies = Hash.new { |h, k| h[k] = Set.new }
       @local_bodies = Hash.new { |h, k| h[k] = [] }
       @tests = Hash.new { |h, k| h[k] = [] }
@@ -35,6 +36,7 @@ module Sukashi
       @refinement_scopes = Set.new
       @open_dispatch = Set.new
       @assigned_constants = Set.new
+      @assigned_names = Hash.new { |h, k| h[k] = Set.new }
       @constant_owners = Hash.new { |h, k| h[k] = Set.new }
       @errors = []
       @trees = {}
@@ -48,8 +50,8 @@ module Sukashi
           errors << path
         end
       end
-      @references.each do |path, names|
-        names.each { |name| dependencies[path].merge(definitions[name]) }
+      @constant_readers.each do |name, paths|
+        paths.each { |path| dependencies[path].merge(definitions[name]) }
       end
       @named_uses.each do |path, names|
         names.each { |name| dependencies[path].merge(@named_defs[name]) }
@@ -103,6 +105,10 @@ module Sukashi
       @http_calls.map(&:first).uniq
     end
 
+    def readers_of_constant(name)
+      @constant_readers.fetch(name, [])
+    end
+
     def users_of(path)
       @reverse.fetch(path, [])
     end
@@ -132,6 +138,11 @@ module Sukashi
     end
 
     private
+
+    def record_assignment(path, name)
+      @assigned_constants << name
+      @assigned_names[path] << name if name
+    end
 
     def record_dsl(node, path)
       arg = node.arguments&.arguments&.first
@@ -172,10 +183,10 @@ module Sukashi
         definitions[short_name] << path
       when Prism::ConstantWriteNode, Prism::ConstantOrWriteNode, Prism::ConstantAndWriteNode,
            Prism::ConstantOperatorWriteNode, Prism::ConstantTargetNode, Prism::ConstantPathTargetNode
-        @assigned_constants << node.name.to_s
+        record_assignment(path, node.name.to_s)
       when Prism::ConstantPathWriteNode, Prism::ConstantPathOrWriteNode,
            Prism::ConstantPathAndWriteNode, Prism::ConstantPathOperatorWriteNode
-        @assigned_constants << node.target.name.to_s
+        record_assignment(path, node.target.name.to_s)
       when Prism::AliasMethodNode, Prism::UndefNode
         @open_dispatch << owner
         controller_hooks << path
@@ -217,7 +228,8 @@ module Sukashi
         end
         if %i[const_set remove_const autoload].include?(node.name)
           arg = node.arguments&.arguments&.first
-          @assigned_constants << ([Prism::StringNode, Prism::SymbolNode].include?(arg.class) ? arg.unescaped : nil)
+          name = arg.unescaped if [Prism::StringNode, Prism::SymbolNode].include?(arg.class)
+          record_assignment(path, name)
         end
         if node.name == :eval
           @open_dispatch << nil # A binding can refer to any receiver.
@@ -249,7 +261,7 @@ module Sukashi
           dependencies[path] << (target.end_with?(".rb") ? target : target + ".rb")
         end
       when Prism::ConstantReadNode, Prism::ConstantPathNode
-        @references[path] << node.name.to_s
+        @constant_readers[node.name.to_s] << path
       end
       node.compact_child_nodes.each { |child| scan(child, path, owner, in_example_group) }
     end
