@@ -14,6 +14,8 @@ module Sukashi
   end
 
   class Runner
+    class InvalidReport < StandardError; end
+
     def initialize(job, seed)
       @job, @seed = job, seed
     end
@@ -32,13 +34,15 @@ module Sukashi
         end
         case plain ? "command" : @job.fetch("runner")
         when "rspec"
-          formatter = "json"
+          env["SUKASHI_REPORT_DIR"] = dir
+          command.concat(["--require", File.expand_path("rspec_report.rb", __dir__)])
+          formatter = "Sukashi::RSpecReport"
           if discover
             command.concat(["--require", File.expand_path("runtime_identity.rb", __dir__),
                             "--require", File.expand_path("rspec_inventory.rb", __dir__)])
             formatter = "Sukashi::RSpecInventory"
           end
-          command.concat(["--seed", @seed.to_s, "--format", formatter, "--out", File.join(dir, "rspec.json")])
+          command.concat(["--seed", @seed.to_s, "--format", formatter])
           discover ? command << "--dry-run" : command.concat(["--format", "progress"])
           command.concat(["--require", File.expand_path("rspec_selection.rb", __dir__)]) if ids
         when "minitest"
@@ -49,8 +53,12 @@ module Sukashi
         end
         ok = system(env, [command.first, command.first], *command.drop(1), out: :err)
         rows = read_reports(dir) unless plain
+        ok &&= !rows.any? { |row| row["status"] == "failed" } if rows && @job["runner"] == "rspec"
         Result.new(ok: !!ok, rows: rows, runtime_identity: discover ? read_runtime_identity(dir) : nil, seconds: (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(3))
       end
+    rescue InvalidReport => e
+      warn e.message
+      Result.new(ok: false, rows: [])
     rescue Errno::E2BIG, Errno::ENOENT => e
       warn e.message
       Result.new(ok: false)
@@ -72,19 +80,12 @@ module Sukashi
     end
 
     def read_reports(dir)
+      return read_rspec_reports(dir) if @job["runner"] == "rspec"
       files = Dir[File.join(dir, "*.json")]
       return if files.empty?
       rows = files.flat_map do |file|
         data = JSON.parse(File.read(file))
-        if @job["runner"] == "rspec"
-          return if data.fetch("summary").fetch("errors_outside_of_examples_count", 0).positive?
-          data.fetch("examples").map do |e|
-            { "id" => e.fetch("id"), "file" => e.fetch("file_path"), "line" => e.fetch("line_number"),
-              "status" => e.fetch("status"), "custom_protocol" => e["custom_protocol"] }
-          end
-        else
-          data
-        end
+        data
       end
       return unless rows.all? { |r| r.is_a?(Hash) && r["id"].is_a?(String) } && rows.map { |r| r["id"] }.uniq.size == rows.size
       rows.each do |row|
@@ -94,6 +95,34 @@ module Sukashi
       rows
     rescue JSON::ParserError, KeyError, TypeError, ArgumentError
       nil
+    end
+
+    def read_rspec_reports(dir)
+      files = Dir[File.join(dir, "rspec-*.json")].sort
+      started = Dir[File.join(dir, "rspec-*.json.started")].map { |p| p.delete_suffix(".started") }.sort
+      return if files.empty? && started.empty?
+      raise InvalidReport, "RSpec worker report missing" unless files == started
+      rows = files.flat_map do |file|
+        data = JSON.parse(File.read(file))
+        examples = data.fetch("examples")
+        summary = data.fetch("summary")
+        unless examples.is_a?(Array) && summary.fetch("example_count") == examples.size &&
+               summary.fetch("errors_outside_of_examples_count") == 0
+          raise InvalidReport, "RSpec worker report incomplete"
+        end
+        examples.map do |e|
+          unless e.is_a?(Hash) && e["id"].is_a?(String) && e["file_path"].is_a?(String) &&
+                 e["line_number"].is_a?(Integer) && %w[passed failed pending].include?(e["status"])
+            raise InvalidReport, "RSpec worker example invalid"
+          end
+          { "id" => e["id"], "file" => Pathname.new(File.expand_path(e["file_path"])).relative_path_from(Pathname.pwd).to_s,
+            "line" => e["line_number"], "status" => e["status"], "custom_protocol" => e["custom_protocol"] }
+        end
+      end
+      raise InvalidReport, "RSpec worker report contains duplicate IDs" unless rows.map { |r| r["id"] }.uniq.size == rows.size
+      rows
+    rescue JSON::ParserError, KeyError, TypeError, NoMethodError, ArgumentError
+      raise InvalidReport, "RSpec worker report malformed"
     end
   end
 end
