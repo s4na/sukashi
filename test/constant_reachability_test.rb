@@ -34,6 +34,23 @@ class ConstantReachabilityTest < Minitest::Test
     refute_includes reach, "app/models/other.rb"
   end
 
+  def test_assigned_classes_reach_constant_and_literal_consumers
+    path = "lib/fee.rb"
+    direct = "test/autoload_test.rb"
+    literal = "test/lookup_test.rb"
+    relative = "test/relative_test.rb"
+    extra = {
+      path => "Fee = Struct.new(:amount)",
+      relative => 'require_relative "../lib/fee"',
+      direct => 'class AutoloadTest; def test_amount; Fee.new.amount; end; end',
+      literal => 'class LookupTest; def test_amount; "Fee".constantize.new.amount; end; end'
+    }
+    tests = TESTS | [relative, direct, literal]
+    reach = analysis(extra, tests: tests).closure([path])
+    [relative, direct, literal].each { |test| assert_includes reach, test }
+    refute_includes reach, "test/other_test.rb"
+  end
+
   def test_name_strings_and_plural_symbols_join_the_closure
     reach = closure({ "app/models/other.rb" => "class Other; has_many :coupons; def self.run; 1; end; end" })
     assert_includes reach, "test/other_test.rb"

@@ -80,14 +80,14 @@ module Sukashi
         end
         next unless facts
         facts.classes.each { |name, _| segments.merge(name.split("::")) }
+        @index.assigned_names.fetch(current, []).each do |name|
+          @index.readers_of_constant(name).each(&push)
+          add_literal_users(name, &push)
+        end
         # Application code does not name or instantiate test classes.
         next if @test_paths.include?(current)
         facts.classes.each do |name, superclass|
-          name_forms(name.split("::").last).each do |form|
-            next unless @forms.add?(form)
-            needle = form.b
-            @facts.each { |other, f| push.(other) if f.blob.include?(needle) }
-          end
+          add_literal_users(name.split("::").last, &push)
           next if !superclass || @abstract.include?(superclass)
           @index.definitions.fetch(superclass.split("::").last, []).each do |other|
             push.(other) if @facts[other]&.classes&.any? { |n, _| n == superclass || n.end_with?("::#{superclass}") }
@@ -132,6 +132,14 @@ module Sukashi
     def external?(root)
       @external.include?(self.class.normalize(root)) ||
         (root.match?(/\A[A-Z]\w*\z/) && Object.const_defined?(root, false))
+    end
+
+    def add_literal_users(name)
+      name_forms(name).each do |form|
+        next unless @forms.add?(form)
+        needle = form.b
+        @facts.each { |path, facts| yield path if facts.blob.include?(needle) }
+      end
     end
 
     def name_forms(short)
